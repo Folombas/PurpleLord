@@ -1,248 +1,102 @@
-// ============================================================================
-// Game1.cs - Главный класс игры / Main game class
-// Purple Lord Platformer - 2D платформер о выборе пути в IT
-// ============================================================================
-
+using System;
+using System.Collections.Generic;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
-using PurpleLordPlatformer.Managers;
-using PurpleLordPlatformer.Scenes;
-using PurpleLordPlatformer.Systems;
-using PurpleLordPlatformer.UI;
+using PurpleLord.Entities;
+using PurpleLord.Core;
 
-namespace PurpleLordPlatformer
+namespace PurpleLord
 {
-    /// <summary>
-    /// Главный класс игры, унаследованный от MonoGame.Game.
-    /// Инициализирует все менеджеры, сервисы и запускает игровой цикл.
-    ///
-    /// Main game class inherited from MonoGame.Game.
-    /// Initializes all managers, services and runs the game loop.
-    /// </summary>
     public class Game1 : Game
     {
-        // Графический адаптер и спрайт-батч / Graphics adapter and sprite batch
         private GraphicsDeviceManager _graphics;
         private SpriteBatch _spriteBatch;
         
-        // Менеджеры / Managers
-        private SceneManager _sceneManager;
-        private Managers.ContentManager _contentManager;
-        private InputManager _inputManager;
-        private AudioManager _audioManager;
-        private EffectManager _effectManager;
+        // Игрок
+        private Player _player;
         
-        // Пост-обработка / Post-processing
-        private PostProcessingSystem _postProcessingSystem;
+        // Камера
+        private Camera2D _camera;
         
-        // UI менеджер / UI Manager
-        private UIManager _uiManager;
-        
-        // Состояние игры / Game state
-        private Core.GameState _gameState;
-        
-        // Конструктор / Constructor
+        // Платформы
+        private List<Rectangle> _platforms;
+
         public Game1()
         {
             _graphics = new GraphicsDeviceManager(this);
-            Content = new Microsoft.Xna.Framework.Content.ContentManager(this);
-            
-            // Настройка окна / Window settings
-            Window.Title = "Purple Lord: Path of Choices | Фиолетовый Лорд: Путь Выбора";
+            Content.RootDirectory = "Content";
             IsMouseVisible = true;
             
-            // Настройка графики / Graphics settings
-            _graphics.PreferredBackBufferWidth = 1920;
-            _graphics.PreferredBackBufferHeight = 1080;
-            _graphics.GraphicsProfile = GraphicsProfile.HiDef;
+            // Настройка графики
+            _graphics.PreferredBackBufferWidth = 1280;
+            _graphics.PreferredBackBufferHeight = 720;
             _graphics.ApplyChanges();
             
-            // Инициализация состояния / Initialize game state
-            _gameState = new GameState();
+            Window.Title = "Purple Lord - Platformer";
         }
 
-        /// <summary>
-        /// Инициализация игры. Создание и настройка всех менеджеров.
-        /// Game initialization. Create and configure all managers.
-        /// </summary>
         protected override void Initialize()
         {
+            // Инициализация камеры
+            _camera = new Camera2D(GraphicsDevice.Viewport);
+            
+            // Создание платформ
+            _platforms = new List<Rectangle>
+            {
+                new Rectangle(0, 650, 1280, 50),      // Пол
+                new Rectangle(200, 550, 200, 30),     // Платформа 1
+                new Rectangle(500, 450, 200, 30),     // Платформа 2
+                new Rectangle(800, 350, 200, 30),     // Платформа 3
+                new Rectangle(300, 250, 150, 30),     // Платформа 4
+            };
+            
+            // Создание игрока
+            _player = new Player(new Vector2(100, 550), _platforms);
+            
             base.Initialize();
-            
-            // Инициализация менеджеров / Initialize managers
-            _contentManager = new Managers.ContentManager(Content, _graphics);
-            _inputManager = new InputManager();
-            _audioManager = new AudioManager(Content);
-            _effectManager = new EffectManager(GraphicsDevice);
-            _postProcessingSystem = new PostProcessingSystem(GraphicsDevice);
-            _uiManager = new UIManager(this, GraphicsDevice, Content);
-            
-            // Инициализация менеджера сцен / Initialize scene manager
-            _sceneManager = new SceneManager(this, _contentManager, _inputManager, 
-                _audioManager, _effectManager, _uiManager);
-            
-            // Загрузка начальной сцены (главное меню) / Load initial scene (main menu)
-            _sceneManager.LoadScene<MainMenuScene>();
-            
-            // Подписка на события / Subscribe to events
-            _sceneManager.OnSceneChanged += OnSceneChanged;
-            
-            // Инициализация пост-обработки / Initialize post-processing
-            _postProcessingSystem.Initialize();
         }
 
-        /// <summary>
-        /// Загрузка контента. Вызывается после Initialize.
-        /// Content loading. Called after Initialize.
-        /// </summary>
         protected override void LoadContent()
         {
-            base.LoadContent();
-            
-            // Создание спрайт-батча / Create sprite batch
             _spriteBatch = new SpriteBatch(GraphicsDevice);
-            
-            // Загрузка контента через менеджер / Load content through manager
-            _contentManager.LoadAllContent();
-            
-            // Инициализация пост-эффектов / Initialize post-effects
-            _postProcessingSystem.LoadContent();
         }
 
-        /// <summary>
-        /// Обновление игровой логики. Вызывается каждый кадр.
-        /// Update game logic. Called every frame.
-        /// </summary>
         protected override void Update(GameTime gameTime)
         {
-            // Обновление менеджера ввода / Update input manager
-            _inputManager.Update(gameTime);
-            
-            // Проверка выхода из игры / Check for game exit
-            if (_inputManager.IsKeyDown(Keys.Escape) || 
-                _inputManager.IsGamePadButtonDown(Buttons.Back))
+            if (GamePad.GetState(PlayerIndex.One).Buttons.Back == ButtonState.Pressed ||
+                Keyboard.GetState().IsKeyDown(Keys.Escape))
                 Exit();
-            
-            // Обновление текущей сцены / Update current scene
-            _sceneManager.Update(gameTime);
-            
-            // Обновление пост-обработки / Update post-processing
-            _postProcessingSystem.Update(gameTime, _sceneManager.CurrentScene);
-            
-            // Обновление UI / Update UI
-            _uiManager.Update(gameTime);
-            
-            // Обновление состояния игры / Update game state
-            _gameState.Update(gameTime);
-            
+
+            // Обновление игрока
+            _player.Update(gameTime);
+
+            // Обновление камеры (следит за игроком, но не уходит в отрицательные значения)
+            float cameraX = Math.Max(0, _player.Position.X - 640);
+            float cameraY = Math.Max(0, _player.Position.Y - 360);
+            _camera.Position = new Vector2(cameraX, cameraY);
+
             base.Update(gameTime);
         }
 
-        /// <summary>
-        /// Отрисовка игры. Вызывается каждый кадр.
-        /// Draw game. Called every frame.
-        /// </summary>
         protected override void Draw(GameTime gameTime)
         {
-            // Очистка экрана с цветом фона текущей сцены / Clear screen with current scene background color
-            Color clearColor = _sceneManager.CurrentScene?.BackgroundColor ?? Color.Black;
-            GraphicsDevice.Clear(clearColor);
+            GraphicsDevice.Clear(new Color(135, 206, 235)); // Небо
             
-            // Начало отрисовки с пост-обработкой / Begin drawing with post-processing
-            _postProcessingSystem.BeginDraw();
+            _spriteBatch.Begin(transformMatrix: _camera.GetViewMatrix());
             
-            _spriteBatch.Begin(
-                SpriteSortMode.Deferred,
-                BlendState.AlphaBlend,
-                SamplerState.PointWrap,
-                DepthStencilState.None,
-                RasterizerState.CullNone,
-                null,
-                _sceneManager.CurrentScene?.Camera?.GetTransformMatrix() ?? Matrix.Identity
-            );
+            // Отрисовка платформ
+            foreach (var platform in _platforms)
+            {
+                _spriteBatch.Draw(platform, Color.DarkGreen);
+            }
             
-            // Отрисовка текущей сцены / Draw current scene
-            _sceneManager.Draw(_spriteBatch, gameTime);
+            // Отрисовка игрока
+            _player.Draw(_spriteBatch, gameTime);
             
             _spriteBatch.End();
-            
-            // Отрисовка UI поверх всего / Draw UI on top
-            _spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend);
-            _uiManager.Draw(_spriteBatch, gameTime);
-            _spriteBatch.End();
-            
-            // Применение пост-обработки / Apply post-processing
-            _postProcessingSystem.EndDraw(_spriteBatch);
             
             base.Draw(gameTime);
         }
-
-        /// <summary>
-        /// Обработчик события смены сцены.
-        /// Scene change event handler.
-        /// </summary>
-        private void OnSceneChanged(Scene oldScene, Scene newScene)
-        {
-            // Логирование смены сцены / Log scene change
-            System.Diagnostics.Debug.WriteLine(
-                $"Scene changed: {oldScene?.GetType().Name} -> {newScene?.GetType().Name}");
-            
-            // Сброс пост-эффектов при смене сцены / Reset post-effects on scene change
-            _postProcessingSystem.ResetEffects();
-        }
-
-        /// <summary>
-        /// Освобождение ресурсов.
-        /// Release resources.
-        /// </summary>
-        protected override void Dispose(bool disposing)
-        {
-            if (disposing)
-            {
-                _contentManager?.Dispose();
-                _sceneManager?.Dispose();
-                _audioManager?.Dispose();
-                _effectManager?.Dispose();
-                _postProcessingSystem?.Dispose();
-                _uiManager?.Dispose();
-            }
-            
-            base.Dispose(disposing);
-        }
-
-        #region Properties | Свойства
-        
-        /// <summary>
-        /// Доступ к менеджеру сцен из других классов.
-        /// Access to scene manager from other classes.
-        /// </summary>
-        public SceneManager SceneManager => _sceneManager;
-        
-        /// <summary>
-        /// Доступ к менеджеру контента.
-        /// Access to content manager.
-        /// </summary>
-        public ContentManager ContentManager => _contentManager;
-        
-        /// <summary>
-        /// Доступ к менеджеру ввода.
-        /// Access to input manager.
-        /// </summary>
-        public InputManager InputManager => _inputManager;
-        
-        /// <summary>
-        /// Доступ к аудио менеджеру.
-        /// Access to audio manager.
-        /// </summary>
-        public AudioManager AudioManager => _audioManager;
-        
-        /// <summary>
-        /// Доступ к графическому устройству.
-        /// Access to graphics device.
-        /// </summary>
-        public GraphicsDevice GraphicsDevice => GraphicsDevice;
-        
-        #endregion
     }
 }

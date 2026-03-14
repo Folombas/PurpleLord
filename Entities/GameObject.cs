@@ -1,43 +1,32 @@
-// ============================================================================
-// GameObject.cs - Базовый класс игрового объекта / Base game object class
-// ============================================================================
-
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 
-namespace PurpleLordPlatformer.Entities
+namespace PurpleLord.Entities
 {
-    public abstract class GameObject
+    public class GameObject
     {
         public Vector2 Position { get; set; }
         public Vector2 Velocity { get; set; }
-        public float Width { get; set; }
-        public float Height { get; set; }
+        public int Width { get; set; } = 32;
+        public int Height { get; set; } = 48;
         public bool IsActive { get; set; } = true;
-        public string Tag { get; set; } = "";
-
-        public Rectangle Bounds => new Rectangle(
-            (int)(Position.X - Width / 2),
-            (int)(Position.Y - Height / 2),
-            (int)Width,
-            (int)Height);
-
+        
+        public Rectangle Bounds => new Rectangle((int)Position.X, (int)Position.Y, Width, Height);
+        
+        public GameObject(Vector2 position)
+        {
+            Position = position;
+        }
+        
         public virtual void Update(GameTime gameTime)
         {
+            Position += Velocity;
         }
-
+        
         public virtual void Draw(SpriteBatch spriteBatch, GameTime gameTime)
         {
-        }
-
-        public bool Intersects(GameObject other)
-        {
-            return Bounds.Intersects(other.Bounds);
-        }
-
-        public bool Intersects(Rectangle rect)
-        {
-            return Bounds.Intersects(rect);
+            var rect = new Rectangle((int)Position.X, (int)Position.Y, Width, Height);
+            spriteBatch.Draw(rect, Color.Purple);
         }
     }
 }
