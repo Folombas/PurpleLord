@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
+using Microsoft.Xna.Framework.Audio;
 using PurpleLord.Entities;
 using PurpleLord.Core;
 
@@ -39,9 +40,16 @@ namespace PurpleLord
         private Vector2 _sunPosition = new Vector2(100, 80);
         private float _sunRayTimer;
 
-        // Размеры мира
-        private const int WORLD_WIDTH = 3000;
+        // Размеры мира (БЕСКОНЕЧНЫЙ МИР)
         private const int GROUND_Y = 580;
+        private const int CHUNK_SIZE = 500; // Размер чанка
+        private int _generatedChunks = 0; // Сколько чанков сгенерировано
+        private int _maxVisibleChunks = 5; // Сколько чанков держать в памяти
+        
+        // Реки
+        private List<River> _rivers;
+        private List<Bridge> _bridges;
+        private List<Crocodile> _crocodiles;
 
         // Цвета
         private Color _skyColor = new Color(135, 206, 235);
@@ -50,11 +58,18 @@ namespace PurpleLord
         private Color _grassColor = new Color(34, 139, 34);
         private Color _dirtColor = new Color(139, 90, 43);
         private Color _sunColor = new Color(255, 220, 0);
+        private Color _riverColor = new Color(65, 105, 225);
         
         // Стартовое меню
         private bool _showStartMenu = true;
         private float _menuBlinkTimer;
         private bool _menuTextVisible = true;
+        
+        // Шрифт и звуки
+        private Microsoft.Xna.Framework.Graphics.SpriteFont _font;
+        private SoundEffect _collectSound;
+        private SoundEffect _hurtSound;
+        private SoundEffect _jumpSound;
 
         public Game1()
         {
@@ -62,10 +77,10 @@ namespace PurpleLord
             Content.RootDirectory = "Content";
             IsMouseVisible = true;
 
-            // Полноэкранный режим
-            _graphics.IsFullScreen = true;
-            _graphics.PreferredBackBufferWidth = GraphicsAdapter.DefaultAdapter.CurrentDisplayMode.Width;
-            _graphics.PreferredBackBufferHeight = GraphicsAdapter.DefaultAdapter.CurrentDisplayMode.Height;
+            // Окно на весь экран (не полный экран)
+            _graphics.IsFullScreen = false;
+            _graphics.PreferredBackBufferWidth = 1920;
+            _graphics.PreferredBackBufferHeight = 1080;
             _graphics.ApplyChanges();
 
             Window.Title = "Purple Lord - Path of Choices";
@@ -76,54 +91,48 @@ namespace PurpleLord
             // === КАМЕРА ===
             _camera = new Camera2D(GraphicsDevice.Viewport);
 
-            // === ПЛАТФОРМЫ И ЗЕМЛЯ ===
+            // === ПЛАТФОРМЫ И ЗЕМЛЯ (начальные чанки) ===
             _platforms = new List<Platform>();
             
-            // Основная земля (вся длина мира)
-            _platforms.Add(new Platform(0, GROUND_Y, WORLD_WIDTH, 200, true));
-            
-            // Платформы в воздухе (разбросаны по миру)
-            _platforms.Add(new Platform(250, 480, 120, 25, false));
-            _platforms.Add(new Platform(450, 400, 140, 25, false));
-            _platforms.Add(new Platform(680, 320, 100, 25, false));
-            _platforms.Add(new Platform(850, 420, 130, 25, false));
-            _platforms.Add(new Platform(1100, 350, 150, 25, false));
-            _platforms.Add(new Platform(1350, 280, 120, 25, false));
-            _platforms.Add(new Platform(1550, 380, 140, 25, false));
-            _platforms.Add(new Platform(1800, 300, 130, 25, false));
-            _platforms.Add(new Platform(2000, 420, 160, 25, false));
-            _platforms.Add(new Platform(2250, 350, 120, 25, false));
-            _platforms.Add(new Platform(2450, 280, 140, 25, false));
-            _platforms.Add(new Platform(2700, 400, 150, 25, false));
+            // Генерируем начальные чанки
+            for (int i = 0; i < 3; i++)
+            {
+                GenerateChunk(i * CHUNK_SIZE);
+            }
 
             // === ИГРОК (на земле, слева) ===
             _player = new Player(new Vector2(150, GROUND_Y - 60));
 
-            // === ПАЛЬМЫ (расставлены по миру) ===
+            // === ЗВУК ПРЫЖКА ===
+            _player.OnJump = () => _jumpSound?.Play();
+
+            // === ПАЛЬМЫ (начальные) ===
             _palmTrees = new List<PalmTree>
             {
                 new PalmTree(new Vector2(100, GROUND_Y - 90)),
+                new PalmTree(new Vector2(350, GROUND_Y - 90)),
                 new PalmTree(new Vector2(600, GROUND_Y - 90)),
-                new PalmTree(new Vector2(1400, GROUND_Y - 90)),
-                new PalmTree(new Vector2(2100, GROUND_Y - 90)),
-                new PalmTree(new Vector2(2800, GROUND_Y - 90)),
             };
 
-            // === ДОМИКИ (деревня справа) ===
+            // === ДОМИКИ (начальные) ===
             _houses = new List<House>
             {
-                new House(new Vector2(950, GROUND_Y - 70), new Color(220, 200, 170)),
-                new House(new Vector2(1080, GROUND_Y - 70), new Color(200, 180, 150)),
-                new House(new Vector2(1200, GROUND_Y - 70), new Color(210, 190, 160)),
+                new House(new Vector2(450, GROUND_Y - 70), new Color(220, 200, 170)),
             };
+            
+            // === РЕКИ ===
+            _rivers = new List<River>();
+            _bridges = new List<Bridge>();
+            
+            // === КРОКОДИЛЫ ===
+            _crocodiles = new List<Crocodile>();
 
             // === ЦВЕТЫ (украшают землю) ===
             _flowers = new List<Flower>();
             var random = new Random();
-            for (int i = 0; i < 40; i++)
+            for (int i = 0; i < 20; i++)
             {
-                int x = random.Next(50, WORLD_WIDTH - 50);
-                // Не ставим цветы на домах
+                int x = random.Next(50, 1000);
                 bool onHouse = false;
                 foreach (var house in _houses)
                 {
@@ -132,8 +141,8 @@ namespace PurpleLord
                 }
                 if (!onHouse)
                 {
-                    _flowers.Add(new Flower(new Vector2(x, GROUND_Y - 12), 
-                        random.Next(0, 3) == 0 ? Color.Red : 
+                    _flowers.Add(new Flower(new Vector2(x, GROUND_Y - 12),
+                        random.Next(0, 3) == 0 ? Color.Red :
                         random.Next(0, 2) == 0 ? Color.Yellow : Color.Pink));
                 }
             }
@@ -143,7 +152,7 @@ namespace PurpleLord
             for (int i = 0; i < 8; i++)
             {
                 _clouds.Add(new Cloud(
-                    new Vector2(random.Next(0, WORLD_WIDTH), random.Next(30, 200)),
+                    new Vector2(random.Next(0, 1500), random.Next(30, 200)),
                     20f + random.NextSingle() * 20f
                 ));
             }
@@ -153,48 +162,45 @@ namespace PurpleLord
             for (int i = 0; i < 6; i++)
             {
                 _birds.Add(new Bird(
-                    new Vector2(random.Next(200, WORLD_WIDTH - 200), random.Next(80, 250)),
+                    new Vector2(random.Next(200, 1300), random.Next(80, 250)),
                     50f + random.NextSingle() * 50f
                 ));
             }
 
             // === ДЫМ ===
             _smokeParticles = new List<SmokeParticle>();
-            
-            // === ВОЛНЫ (на море) ===
+
+            // === ВОЛНЫ (на море справа) ===
             _waves = new List<Wave>();
             for (int i = 0; i < 20; i++)
             {
                 _waves.Add(new Wave(2600 + i * 35, GROUND_Y - 20 + (i % 3) * 10));
             }
-            
+
             // === ВУЛКАНЫ ===
             _volcanoes = new List<Volcano>
             {
                 new Volcano(new Vector2(2500, GROUND_Y - 120)),
                 new Volcano(new Vector2(2750, GROUND_Y - 150))
             };
-            
+
             // === ДИКОБРАЗЫ (ползают по земле) ===
             _porcupines = new List<Porcupine>();
-            for (int i = 0; i < 8; i++)
+            for (int i = 0; i < 5; i++)
             {
-                int x = random.Next(400, WORLD_WIDTH - 400);
-                // Не ставим дикобразов на старте
+                int x = random.Next(400, 1200);
                 if (x > 300 && x < 500) x += 500;
                 _porcupines.Add(new Porcupine(new Vector2(x, GROUND_Y - 20)));
             }
-            
+
             // === ПРЕДМЕТЫ ДЛЯ СБОРА (кокосы и бананы на пальмах) ===
             _collectibles = new List<Collectible>();
             foreach (var palm in _palmTrees)
             {
-                // Добавляем кокосы
                 _collectibles.Add(new Collectible(
                     new Vector2(palm.Position.X + 8, palm.Position.Y - 30),
                     CollectibleType.Coconut
                 ));
-                // Добавляем бананы
                 _collectibles.Add(new Collectible(
                     new Vector2(palm.Position.X - 25, palm.Position.Y - 45),
                     CollectibleType.Banana
@@ -228,8 +234,32 @@ namespace PurpleLord
         {
             _spriteBatch = new SpriteBatch(GraphicsDevice);
             
-            // Звуки не загружаем (нужны внешние файлы)
-            // Звуковые эффекты будут визуальными
+            // Загрузка шрифта
+            _font = Content.Load<Microsoft.Xna.Framework.Graphics.SpriteFont>("Arial");
+            
+            // Звуки - создаем через конструктор SoundEffect
+            _collectSound = CreatePcmSound(880, 0.15f);
+            _hurtSound = CreatePcmSound(150, 0.3f);
+            _jumpSound = CreatePcmSound(440, 0.1f);
+        }
+        
+        private SoundEffect CreatePcmSound(int frequency, float duration)
+        {
+            int sampleRate = 44100;
+            int numSamples = (int)(sampleRate * duration);
+            byte[] samples = new byte[numSamples * 2]; // 16-bit = 2 bytes per sample
+            
+            for (int i = 0; i < numSamples; i++)
+            {
+                float t = (float)i / sampleRate;
+                float envelope = 1 - t / duration;
+                short sample = (short)((float)Math.Sin(2 * Math.PI * frequency * t) * envelope * 16000);
+                
+                samples[i * 2] = (byte)(sample & 0xFF);
+                samples[i * 2 + 1] = (byte)((sample >> 8) & 0xFF);
+            }
+            
+            return new SoundEffect(samples, sampleRate, AudioChannels.Mono);
         }
 
         protected override void Update(GameTime gameTime)
@@ -269,22 +299,25 @@ namespace PurpleLord
             // Обновление игрока
             _player.Update(gameTime, _platforms);
 
-            // КАМЕРА СЛЕДУЕТ ЗА ИГРОКОМ (плавно)
+            // КАМЕРА СЛЕДУЕТ ЗА ИГРОКОМ (без границ - бесконечный мир)
             float targetX = _player.Position.X - GraphicsDevice.Viewport.Width / 2;
-            targetX = Math.Max(0, Math.Min(targetX, WORLD_WIDTH - GraphicsDevice.Viewport.Width));
+            targetX = Math.Max(0, targetX); // Только левая граница
             _camera.Position = new Vector2(targetX, 0);
+            
+            // === ГЕНЕРАЦИЯ НОВЫХ ЧАНКОВ ===
+            GenerateNewChunks();
 
             // Обновление декораций
             foreach (var cloud in _clouds)
-                cloud.Update(delta, WORLD_WIDTH);
+                cloud.Update(delta, (int)(_player.Position.X + GraphicsDevice.Viewport.Width * 2));
 
             foreach (var bird in _birds)
                 bird.Update(delta);
-            
+
             // Обновление дельфинов
             foreach (var dolphin in _dolphins)
                 dolphin.Update(delta);
-            
+
             // Обновление корабля
             _ship.Update(delta);
 
@@ -295,7 +328,7 @@ namespace PurpleLord
             // Обновление вулканов
             foreach (var volcano in _volcanoes)
                 volcano.Update(delta);
-            
+
             // Обновление солнца
             UpdateSun(delta);
 
@@ -303,6 +336,10 @@ namespace PurpleLord
             foreach (var porcupine in _porcupines)
                 porcupine.Update(delta, _platforms);
             
+            // Обновление крокодилов
+            foreach (var crocodile in _crocodiles)
+                crocodile.Update(delta);
+
             // Обновление XP текстов
             foreach (var xpText in _xpTexts)
                 xpText.Update(delta);
@@ -318,6 +355,9 @@ namespace PurpleLord
 
             // Проверка столкновений с дикобразами
             CheckPorcupineCollisions();
+            
+            // Проверка столкновений с крокодилами
+            CheckCrocodileCollisions();
 
             // Дым из труб
             UpdateSmoke(delta);
@@ -330,6 +370,95 @@ namespace PurpleLord
             _sunRayTimer += delta;
         }
         
+        private void GenerateNewChunks()
+        {
+            // Вычисляем, сколько чанков нужно сгенерировать
+            int playerChunk = (int)(_player.Position.X + GraphicsDevice.Viewport.Width) / CHUNK_SIZE;
+            
+            while (_generatedChunks <= playerChunk + 2)
+            {
+                int chunkX = _generatedChunks * CHUNK_SIZE;
+                GenerateChunk(chunkX);
+                _generatedChunks++;
+            }
+            
+            // Удаляем старые чанки позади игрока
+            int minVisibleChunk = (int)(_player.Position.X - GraphicsDevice.Viewport.Width) / CHUNK_SIZE - 1;
+            _platforms.RemoveAll(p => p.Bounds.X + p.Bounds.Width < minVisibleChunk * CHUNK_SIZE);
+        }
+        
+        private void GenerateChunk(int startX)
+        {
+            var random = new Random(startX); // Детерминированная генерация
+            
+            // Земля чанка
+            _platforms.Add(new Platform(startX, GROUND_Y, CHUNK_SIZE, 200, true));
+            
+            // Платформы в воздухе (случайно)
+            if (random.Next(3) > 0)
+            {
+                _platforms.Add(new Platform(
+                    startX + random.Next(50, CHUNK_SIZE - 150),
+                    GROUND_Y - random.Next(100, 250),
+                    random.Next(80, 150),
+                    25,
+                    false
+                ));
+            }
+            
+            // Пальмы (случайно)
+            if (random.Next(5) > 1)
+            {
+                _palmTrees.Add(new PalmTree(new Vector2(startX + random.Next(50, CHUNK_SIZE - 50), GROUND_Y - 90)));
+                // Добавляем предметы на новую пальму
+                var newPalm = _palmTrees[_palmTrees.Count - 1];
+                _collectibles.Add(new Collectible(new Vector2(newPalm.Position.X + 8, newPalm.Position.Y - 30), CollectibleType.Coconut));
+                _collectibles.Add(new Collectible(new Vector2(newPalm.Position.X - 25, newPalm.Position.Y - 45), CollectibleType.Banana));
+            }
+            
+            // Река с мостом (каждые 3-5 чанков)
+            if (_generatedChunks > 2 && _generatedChunks % 4 == 0)
+            {
+                int riverX = startX + CHUNK_SIZE / 2;
+                _rivers.Add(new River(riverX, GROUND_Y));
+                _bridges.Add(new Bridge(riverX, GROUND_Y));
+                
+                // Крокодилы в реке
+                _crocodiles.Add(new Crocodile(new Vector2(riverX - 30, GROUND_Y - 15)));
+            }
+            
+            // Домики (редко)
+            if (random.Next(10) > 7)
+            {
+                _houses.Add(new House(new Vector2(startX + random.Next(50, CHUNK_SIZE - 100), GROUND_Y - 70),
+                    new Color(random.Next(180, 240), random.Next(160, 220), random.Next(140, 180))));
+            }
+            
+            // Дикобразы (случайно)
+            if (random.Next(3) > 0)
+            {
+                _porcupines.Add(new Porcupine(new Vector2(startX + random.Next(50, CHUNK_SIZE - 50), GROUND_Y - 20)));
+            }
+            
+            // Цветы
+            for (int i = 0; i < 5; i++)
+            {
+                int x = startX + random.Next(20, CHUNK_SIZE - 20);
+                bool onHouse = false;
+                foreach (var house in _houses)
+                {
+                    if (x > house.Position.X - 30 && x < house.Position.X + house.Width + 30)
+                        onHouse = true;
+                }
+                if (!onHouse && x % 30 != 0)
+                {
+                    _flowers.Add(new Flower(new Vector2(x, GROUND_Y - 12),
+                        random.Next(0, 3) == 0 ? Color.Red :
+                        random.Next(0, 2) == 0 ? Color.Yellow : Color.Pink));
+                }
+            }
+        }
+
         private void CheckCollectibles()
         {
             for (int i = _collectibles.Count - 1; i >= 0; i--)
@@ -344,7 +473,10 @@ namespace PurpleLord
                         collectible.IsCollected = true;
                         int xpGain = collectible.Type == CollectibleType.Coconut ? 25 : 15;
                         _player.CollectItem(xpGain);
-                        
+
+                        // Звуковой эффект
+                        _collectSound?.Play();
+
                         // Визуальный эффект +XP
                         _xpTexts.Add(new XPFloatText(
                             _player.Position,
@@ -366,6 +498,9 @@ namespace PurpleLord
                     int damage = 20;
                     _player.TakeDamage(porcupine.Position, damage);
 
+                    // Звуковой эффект
+                    _hurtSound?.Play();
+
                     // Эффект крови
                     for (int i = 0; i < 15; i++)
                     {
@@ -374,6 +509,34 @@ namespace PurpleLord
                             new Vector2(
                                 (float)(_random.NextDouble() - 0.5) * 300f,
                                 (float)(_random.NextDouble() - 0.5) * 300f - 100f
+                            )
+                        ));
+                    }
+                }
+            }
+        }
+        
+        private void CheckCrocodileCollisions()
+        {
+            foreach (var crocodile in _crocodiles)
+            {
+                float distance = Vector2.Distance(_player.Position, crocodile.Position);
+                if (distance < 40f)
+                {
+                    int damage = 25;
+                    _player.TakeDamage(crocodile.Position, damage);
+
+                    // Звуковой эффект
+                    _hurtSound?.Play();
+
+                    // Эффект крови
+                    for (int i = 0; i < 20; i++)
+                    {
+                        _bloodParticles.Add(new BloodParticle(
+                            _player.Position,
+                            new Vector2(
+                                (float)(_random.NextDouble() - 0.5) * 350f,
+                                (float)(_random.NextDouble() - 0.5) * 350f - 150f
                             )
                         ));
                     }
@@ -461,6 +624,14 @@ namespace PurpleLord
             foreach (var palm in _palmTrees)
                 palm.Draw(_spriteBatch);
 
+            // === РЕКИ ===
+            foreach (var river in _rivers)
+                river.Draw(_spriteBatch);
+            
+            // === МОСТЫ ===
+            foreach (var bridge in _bridges)
+                bridge.Draw(_spriteBatch);
+
             // === ПРЕДМЕТЫ ДЛЯ СБОРА ===
             foreach (var collectible in _collectibles)
                 collectible.Draw(_spriteBatch);
@@ -472,6 +643,10 @@ namespace PurpleLord
             // === ДИКОБРАЗЫ ===
             foreach (var porcupine in _porcupines)
                 porcupine.Draw(_spriteBatch);
+            
+            // === КРОКОДИЛЫ ===
+            foreach (var crocodile in _crocodiles)
+                crocodile.Draw(_spriteBatch);
             
             // === ЧАСТИЦЫ КРОВИ ===
             foreach (var blood in _bloodParticles)
@@ -569,64 +744,50 @@ namespace PurpleLord
         private void DrawStartMenu()
         {
             _spriteBatch.Begin();
-            
+
             int screenWidth = GraphicsDevice.Viewport.Width;
             int screenHeight = GraphicsDevice.Viewport.Height;
             int centerX = screenWidth / 2;
             int centerY = screenHeight / 2;
-            
+
             // Затемнённый фон
             _spriteBatch.Draw(
                 new Rectangle(0, 0, screenWidth, screenHeight),
                 new Color(0, 0, 0, 180)
             );
-            
-            // Заголовок игры
-            DrawCenteredText("PURPLE LORD", new Vector2(centerX, centerY - 100), Color.Purple, 2.5f);
-            DrawCenteredText("Path of Choices", new Vector2(centerX, centerY - 50), Color.White, 1.2f);
-            
+
+            // Заголовок игры - ЧИТАЕМЫЙ ШРИФТ
+            DrawTextCentered("PURPLE LORD", new Vector2(centerX, centerY - 120), Color.Purple, 3f);
+            DrawTextCentered("Path of Choices", new Vector2(centerX, centerY - 60), Color.White, 1.5f);
+
             // Мигающий текст старта
             if (_menuTextVisible)
             {
-                DrawCenteredText("НАЖМИТЕ ЛЮБУЮ КЛАВИШУ ДЛЯ СТАРТА", new Vector2(centerX, centerY + 50), Color.Yellow, 1f);
+                DrawTextCentered("НАЖМИТЕ ЛЮБУЮ КЛАВИШУ ДЛЯ СТАРТА", new Vector2(centerX, centerY + 30), Color.Yellow, 1.2f);
             }
-            
+
             // Управление
-            DrawCenteredText("Управление:", new Vector2(centerX, centerY + 120), Color.White, 0.9f);
-            DrawCenteredText("A/D или ←/→ - Движение | Пробел/W - Прыжок | Escape - Выход", new Vector2(centerX, centerY + 155), Color.LightGray, 0.7f);
-            
+            DrawTextCentered("Управление:", new Vector2(centerX, centerY + 100), Color.White, 1.2f);
+            DrawTextCentered("A/D или ←/→ - Движение", new Vector2(centerX, centerY + 140), Color.LightGray, 1f);
+            DrawTextCentered("Пробел или W - Прыжок", new Vector2(centerX, centerY + 175), Color.LightGray, 1f);
+            DrawTextCentered("Escape - Выход", new Vector2(centerX, centerY + 210), Color.LightGray, 1f);
+
             // Описание игры
-            DrawCenteredText("Собирайте кокосы и бананы для получения XP", new Vector2(centerX, centerY + 210), Color.Lime, 0.7f);
-            DrawCenteredText("Избегайте колючих дикобразов!", new Vector2(centerX, centerY + 235), Color.Red, 0.7f);
-            
+            DrawTextCentered("★ Собирайте кокосы (+25 XP) и бананы (+15 XP)", new Vector2(centerX, centerY + 270), Color.Lime, 1f);
+            DrawTextCentered("★ Избегайте колючих дикобразов! (-20 XP)", new Vector2(centerX, centerY + 310), Color.Red, 1f);
+            DrawTextCentered("★ Путешествуйте по тропическому миру", new Vector2(centerX, centerY + 350), Color.Cyan, 1f);
+
             _spriteBatch.End();
         }
         
-        private void DrawCenteredText(string text, Vector2 center, Color color, float scale)
+        private void DrawTextCentered(string text, Vector2 center, Color color, float scale = 1f)
         {
-            int charWidth = 10;
-            int charHeight = 14;
-            int textWidth = (int)(text.Length * charWidth * scale);
-            int textHeight = (int)(charHeight * scale);
+            if (_font == null) return;
             
-            int startX = (int)center.X - textWidth / 2;
-            int startY = (int)center.Y - textHeight / 2;
+            Vector2 textSize = _font.MeasureString(text) * scale;
+            Vector2 position = center - textSize / 2;
             
-            int x = startX;
-            int y = startY;
-            
-            foreach (char c in text)
-            {
-                if (c == ' ')
-                {
-                    x += (int)(charWidth * scale);
-                    continue;
-                }
-                
-                // Рисуем символ
-                _spriteBatch.Draw(new Rectangle(x, y, (int)(6 * scale), (int)(8 * scale)), color);
-                x += (int)(charWidth * scale);
-            }
+            _spriteBatch.DrawString(_font, text, position, color, 0f, Vector2.Zero, scale, SpriteEffects.None, 0f);
         }
 
         private void DrawMountains(int startX, int baseY)
@@ -653,26 +814,26 @@ namespace PurpleLord
             _spriteBatch.Begin();
 
             // Заголовок
-            DrawText("Purple Lord", new Vector2(15, 15), Color.Purple, 1.3f);
-            DrawText("Path of Choices", new Vector2(15, 42), Color.DarkBlue, 0.8f);
+            DrawText("Purple Lord", new Vector2(15, 15), Color.Purple, 1f);
+            DrawText("Path of Choices", new Vector2(15, 45), Color.DarkBlue, 0.8f);
 
             // Управление
-            string controls = "A/D ←→ | Пробел Прыжок | Escape Выход";
+            string controls = "A/D - Движение | Пробел/W - Прыжок | Escape - Выход";
             DrawText(controls, new Vector2(15, 700), Color.Black, 0.7f);
 
             // Позиция в мире
-            string position = $"Позиция: {(int)_player.Position.X} / {WORLD_WIDTH}";
+            string position = $"Позиция: {(int)_player.Position.X}";
             DrawText(position, new Vector2(1100, 15), Color.DarkGreen, 0.7f);
-            
+
             // === XP И УРОВЕНЬ ===
             string xpText = $"XP: {_player.XP}/{_player.XPToNextLevel} | Уровень: {_player.Level}";
             DrawText(xpText, new Vector2(15, 680), Color.Goldenrod, 0.9f);
-            
+
             // Полоска XP
             int barWidth = 200;
             int barHeight = 12;
             float xpPercent = (float)_player.XP / _player.XPToNextLevel;
-            
+
             // Фон полоски
             _spriteBatch.Draw(new Rectangle(15, 660, barWidth, barHeight), new Color(50, 50, 50));
             // Заполненная часть
@@ -686,25 +847,10 @@ namespace PurpleLord
             _spriteBatch.End();
         }
 
-        private void DrawText(string text, Vector2 position, Color color, float scale)
+        private void DrawText(string text, Vector2 position, Color color, float scale = 1f)
         {
-            // Простая отрисовка текста через прямоугольники (пиксельный шрифт)
-            int x = (int)position.X;
-            int y = (int)position.Y;
-            int charSpacing = 8;
-            
-            foreach (char c in text)
-            {
-                if (c == ' ')
-                {
-                    x += charSpacing;
-                    continue;
-                }
-                
-                // Рисуем символ как простой прямоугольник (заглушка)
-                _spriteBatch.Draw(new Rectangle(x, y, 6, 8), color);
-                x += charSpacing;
-            }
+            if (_font == null) return;
+            _spriteBatch.DrawString(_font, text, position, color, 0f, Vector2.Zero, scale, SpriteEffects.None, 0f);
         }
     }
 
@@ -1497,7 +1643,7 @@ namespace PurpleLord
             MaxLife = Life;
             Size = 3f + new Random().NextSingle() * 4f;
         }
-        
+
         public void Update(float delta)
         {
             Position += Velocity * delta;
@@ -1505,19 +1651,167 @@ namespace PurpleLord
             Velocity = new Vector2(Velocity.X * 0.98f, Velocity.Y); // Сопротивление воздуха
             Life -= delta;
         }
-        
+
         public void Draw(SpriteBatch spriteBatch)
         {
             float alpha = Life / MaxLife;
             Color bloodColor = new Color(180, 0, 0, (int)(200 * alpha));
             int size = (int)(Size * alpha);
-            
+
             if (size > 0)
             {
                 spriteBatch.Draw(
                     new Rectangle((int)Position.X - size/2, (int)Position.Y - size/2, size, size),
                     bloodColor
                 );
+            }
+        }
+    }
+    
+    // === РЕКА ===
+    public class River
+    {
+        public int X;
+        public int Y;
+        public int Width = 120;
+        
+        public River(int x, int y)
+        {
+            X = x;
+            Y = y;
+        }
+        
+        public void Draw(SpriteBatch spriteBatch)
+        {
+            Color riverColor = new Color(65, 105, 225);
+            Color shoreColor = new Color(210, 180, 140);
+            
+            // Берега
+            spriteBatch.Draw(new Rectangle(X - Width/2 - 10, Y - 5, 10, 30), shoreColor);
+            spriteBatch.Draw(new Rectangle(X + Width/2, Y - 5, 10, 30), shoreColor);
+            
+            // Вода
+            spriteBatch.Draw(new Rectangle(X - Width/2, Y, Width, 25), riverColor);
+            
+            // Волны на реке
+            for (int i = 0; i < 5; i++)
+            {
+                float waveOffset = (float)Math.Sin(DateTime.Now.Millisecond / 200f + i) * 3f;
+                spriteBatch.Draw(
+                    new Rectangle(X - Width/2 + 15 + i * 20, (int)(Y + 5 + waveOffset), 12, 3),
+                    new Color(100, 140, 255, 150)
+                );
+            }
+        }
+    }
+    
+    // === МОСТ ===
+    public class Bridge
+    {
+        public int X;
+        public int Y;
+        public int Width = 140;
+        
+        public Bridge(int x, int y)
+        {
+            X = x;
+            Y = y;
+        }
+        
+        public void Draw(SpriteBatch spriteBatch)
+        {
+            Color woodColor = new Color(139, 90, 43);
+            Color railColor = new Color(101, 67, 33);
+            
+            // Основание моста
+            spriteBatch.Draw(new Rectangle(X - Width/2, Y - 8, Width, 10), woodColor);
+            
+            // Перила
+            spriteBatch.Draw(new Rectangle(X - Width/2, Y - 15, Width, 4), railColor);
+            
+            // Опоры перил
+            for (int i = 0; i < 7; i++)
+            {
+                spriteBatch.Draw(new Rectangle(X - Width/2 + 10 + i * 20, Y - 15, 3, 11), railColor);
+            }
+            
+            // Доски моста
+            for (int i = 0; i < 10; i++)
+            {
+                spriteBatch.Draw(new Rectangle(X - Width/2 + 5 + i * 13, Y - 6, 2, 6), new Color(120, 70, 30));
+            }
+        }
+    }
+    
+    // === КРОКОДИЛ ===
+    public class Crocodile
+    {
+        public Vector2 Position;
+        public Vector2 Velocity;
+        public float Direction = 1;
+        public float AnimationTimer;
+        
+        public Crocodile(Vector2 position)
+        {
+            Position = position;
+        }
+        
+        public void Update(float delta)
+        {
+            AnimationTimer += delta;
+            
+            // Движение влево-вправо в реке
+            Position = new Vector2(Position.X + Direction * 40f * delta, Position.Y);
+            
+            // Смена направления
+            if (AnimationTimer > 3f)
+            {
+                Direction = -Direction;
+                AnimationTimer = 0f;
+            }
+        }
+        
+        public void Draw(SpriteBatch spriteBatch)
+        {
+            Color crocColor = new Color(34, 139, 34);
+            Color bellyColor = new Color(144, 238, 144);
+            Color eyeColor = Color.Yellow;
+            
+            int x = (int)Position.X;
+            int y = (int)Position.Y;
+            
+            // Тело (частично в воде)
+            spriteBatch.Draw(new Rectangle(x - 25, y - 5, 50, 15), crocColor);
+            
+            // Голова
+            int headX = Direction > 0 ? x + 20 : x - 30;
+            spriteBatch.Draw(new Rectangle(headX, y - 8, 20, 12), crocColor);
+            
+            // Пасть
+            spriteBatch.Draw(new Rectangle(headX + (Direction > 0 ? 15 : 0), y - 3, 10, 4), new Color(100, 50, 50));
+            
+            // Зубы
+            for (int i = 0; i < 4; i++)
+            {
+                int toothX = headX + (Direction > 0 ? 16 + i * 2 : -i * 2);
+                spriteBatch.Draw(new Rectangle(toothX, y - 5, 2, 3), Color.White);
+            }
+            
+            // Глаз
+            int eyeX = headX + (Direction > 0 ? 12 : 4);
+            spriteBatch.Draw(new Rectangle(eyeX, y - 6, 4, 4), eyeColor);
+            spriteBatch.Draw(new Rectangle(eyeX + 1, y - 5, 2, 2), Color.Black);
+            
+            // Хвост
+            int tailX = Direction > 0 ? x - 25 : x + 25;
+            float tailWag = (float)Math.Sin(AnimationTimer * 5f) * 5f;
+            spriteBatch.Draw(new Rectangle(tailX - (Direction > 0 ? 10 : 0), (int)(y + tailWag), 10, 8), crocColor);
+            
+            // Шипы на спине
+            for (int i = 0; i < 5; i++)
+            {
+                int spikeX = x - 20 + i * 10;
+                spriteBatch.Draw(new Rectangle(spikeX, y - 12, 4, 6), crocColor);
             }
         }
     }

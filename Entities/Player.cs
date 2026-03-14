@@ -28,23 +28,26 @@ namespace PurpleLord.Entities
         private float _walkAnimationTimer = 0f;
         private bool _facingRight = true;
         private float _bounceOffset = 0f;
-        
+
         // Спокойное состояние
         private float _idleTimer = 0f;
         private float _lookDirectionTimer = 0f;
         private bool _lookingLeft = false;
         private bool _isIdle = true;
-        
+
         // Система XP
         public int XP { get; set; } = 0;
         public int Level { get; set; } = 1;
         public int XPToNextLevel { get; set; } = 100;
-        
+
         // Состояние при получении урона
         private bool _isHurt = false;
         private float _hurtTimer = 0f;
         private float _hurtDuration = 0.3f;
         private Vector2 _hurtVelocity = Vector2.Zero;
+        
+        // Callback для звука прыжка
+        public Action OnJump { get; set; }
 
         // Размеры (шарообразный)
         public int Radius = 28;
@@ -61,17 +64,15 @@ namespace PurpleLord.Entities
         public Player(Vector2 position)
         {
             Position = position;
+            // Инициализируем предыдущее состояние клавиатуры
+            _previousKeyboardState = Keyboard.GetState();
         }
-        
+
         public void Update(GameTime gameTime, List<Platform> platforms)
         {
             _platforms = platforms;
             float deltaTime = (float)gameTime.ElapsedGameTime.TotalSeconds;
             KeyboardState keyboardState = Keyboard.GetState();
-
-            // === ИНИЦИАЛИЗАЦИЯ ПРЕДЫДУЩЕГО СОСТОЯНИЯ (чтобы не было авто-прыжка) ===
-            if (_previousKeyboardState == null)
-                _previousKeyboardState = keyboardState;
 
             // === ОБРАБОТКА ПОЛУЧЕНИЯ УРОНА ===
             if (_isHurt)
@@ -113,12 +114,10 @@ namespace PurpleLord.Entities
             // Гравитация
             Velocity = new Vector2(Velocity.X, Velocity.Y + _gravity * deltaTime);
 
-            // === ПРЫЖОК (только по нажатию, не авто) ===
-            bool jumpPressed = keyboardState.IsKeyDown(Keys.Space) || keyboardState.IsKeyDown(Keys.W);
-            bool jumpJustPressed = jumpPressed &&
-                (!_previousKeyboardState.HasValue || 
-                (!_previousKeyboardState.Value.IsKeyDown(Keys.Space) &&
-                !_previousKeyboardState.Value.IsKeyDown(Keys.W)));
+            // === ПРЫЖОК (ТОЛЬКО ПО НАЖАТИЮ - проверяем предыдущий кадр) ===
+            bool spaceNow = keyboardState.IsKeyDown(Keys.Space) || keyboardState.IsKeyDown(Keys.W);
+            bool spaceBefore = _previousKeyboardState.Value.IsKeyDown(Keys.Space) || _previousKeyboardState.Value.IsKeyDown(Keys.W);
+            bool jumpJustPressed = spaceNow && !spaceBefore;
 
             if (jumpJustPressed)
             {
@@ -128,12 +127,14 @@ namespace PurpleLord.Entities
                     _jumpCount = 1;
                     _isGrounded = false;
                     _isIdle = false;
+                    OnJump?.Invoke(); // Звук прыжка
                 }
                 else if (_jumpCount < _maxJumps)
                 {
                     Velocity = new Vector2(Velocity.X, _jumpForce);
                     _jumpCount++;
                     _isIdle = false;
+                    OnJump?.Invoke(); // Звук прыжка
                 }
             }
 
