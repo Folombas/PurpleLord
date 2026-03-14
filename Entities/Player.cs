@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
+using PurpleLord.Core;
 
 namespace PurpleLord.Entities
 {
@@ -12,15 +13,21 @@ namespace PurpleLord.Entities
         private List<Rectangle> _platforms;
         
         private float _moveSpeed = 300f;
-        private float _jumpForce = -500f;
-        private float _gravity = 1200f;
+        private float _jumpForce = -550f;
+        private float _gravity = 1500f;
         private bool _isGrounded = false;
         private int _jumpCount = 0;
         private int _maxJumps = 2;
         
+        // Анимация
+        private float _walkAnimationTimer = 0f;
+        private bool _facingRight = true;
+        
         public Player(Vector2 position, List<Rectangle> platforms) : base(position)
         {
             _platforms = platforms;
+            Width = 40;
+            Height = 60;
         }
         
         public override void Update(GameTime gameTime)
@@ -28,13 +35,23 @@ namespace PurpleLord.Entities
             float deltaTime = (float)gameTime.ElapsedGameTime.TotalSeconds;
             KeyboardState keyboardState = Keyboard.GetState();
             
+            // Движение
             float moveX = 0;
-            if (keyboardState.IsKeyDown(Keys.A) || keyboardState.IsKeyDown(Keys.Left)) moveX = -1;
-            if (keyboardState.IsKeyDown(Keys.D) || keyboardState.IsKeyDown(Keys.Right)) moveX = 1;
+            if (keyboardState.IsKeyDown(Keys.A) || keyboardState.IsKeyDown(Keys.Left))
+            {
+                moveX = -1;
+                _facingRight = false;
+            }
+            if (keyboardState.IsKeyDown(Keys.D) || keyboardState.IsKeyDown(Keys.Right))
+            {
+                moveX = 1;
+                _facingRight = true;
+            }
             
             Velocity = new Vector2(moveX * _moveSpeed, Velocity.Y);
             Velocity = new Vector2(Velocity.X, Velocity.Y + _gravity * deltaTime);
             
+            // Прыжок
             if ((keyboardState.IsKeyDown(Keys.Space) || keyboardState.IsKeyDown(Keys.W)) &&
                 !_previousKeyboardState.IsKeyDown(Keys.Space) && !_previousKeyboardState.IsKeyDown(Keys.W))
             {
@@ -54,13 +71,23 @@ namespace PurpleLord.Entities
             Position = new Vector2(Position.X + Velocity.X * deltaTime, Position.Y + Velocity.Y * deltaTime);
             CheckCollisions();
             
+            // Границы мира
             if (Position.X < 0) Position = new Vector2(0, Position.Y);
-            if (Position.X > 1280 - Width) Position = new Vector2(1280 - Width, Position.Y);
             if (Position.Y > 1000)
             {
                 Position = new Vector2(100, 550);
                 Velocity = Vector2.Zero;
                 _jumpCount = 0;
+            }
+            
+            // Анимация ходьбы
+            if (moveX != 0 && _isGrounded)
+            {
+                _walkAnimationTimer += deltaTime * 10f;
+            }
+            else
+            {
+                _walkAnimationTimer = 0f;
             }
             
             _previousKeyboardState = keyboardState;
@@ -69,6 +96,7 @@ namespace PurpleLord.Entities
         private void CheckCollisions()
         {
             _isGrounded = false;
+            
             foreach (var platform in _platforms)
             {
                 if (Bounds.Intersects(platform))
@@ -78,7 +106,10 @@ namespace PurpleLord.Entities
                     float overlapTop = platform.Bottom - Bounds.Top;
                     float overlapBottom = Bounds.Bottom - platform.Top;
                     
-                    float minOverlap = Math.Min(Math.Min(overlapLeft, overlapRight), Math.Min(overlapTop, overlapBottom));
+                    float minOverlap = Math.Min(
+                        Math.Min(overlapLeft, overlapRight),
+                        Math.Min(overlapTop, overlapBottom)
+                    );
                     
                     if (minOverlap == overlapTop && Velocity.Y >= 0)
                     {
@@ -108,13 +139,48 @@ namespace PurpleLord.Entities
         
         public override void Draw(SpriteBatch spriteBatch, GameTime gameTime)
         {
-            var rect = new Rectangle((int)Position.X, (int)Position.Y, Width, Height);
-            spriteBatch.Draw(rect, new Color(138, 43, 226));
+            int x = (int)Position.X;
+            int y = (int)Position.Y;
             
-            var eyeRect = new Rectangle((int)Position.X + 8, (int)Position.Y + 10, 6, 6);
-            spriteBatch.Draw(eyeRect, Color.White);
-            eyeRect = new Rectangle((int)Position.X + 18, (int)Position.Y + 10, 6, 6);
-            spriteBatch.Draw(eyeRect, Color.White);
+            // Цвет игрока - фиолетовый лорд
+            Color bodyColor = new Color(138, 43, 226);
+            Color robeColor = new Color(100, 30, 180);
+            Color skinColor = new Color(255, 220, 180);
+            Color eyeColor = Color.White;
+            Color pupilColor = Color.Black;
+            
+            // Тело (мантия)
+            spriteBatch.Draw(new Rectangle(x + 8, y + 25, 24, 35), robeColor);
+            
+            // Голова
+            spriteBatch.Draw(new Rectangle(x + 10, y + 5, 20, 20), skinColor);
+            
+            // Капюшон
+            spriteBatch.Draw(new Rectangle(x + 8, y + 3, 24, 12), robeColor);
+            
+            // Глаза (направлены в сторону движения)
+            int eyeOffset = _facingRight ? 2 : -2;
+            spriteBatch.Draw(new Rectangle(x + 14 + eyeOffset, y + 12, 5, 5), eyeColor);
+            spriteBatch.Draw(new Rectangle(x + 22 + eyeOffset, y + 12, 5, 5), eyeColor);
+            
+            // Зрачки
+            int pupilOffset = _facingRight ? 1 : -1;
+            spriteBatch.Draw(new Rectangle(x + 15 + pupilOffset + eyeOffset, y + 13, 2, 2), pupilColor);
+            spriteBatch.Draw(new Rectangle(x + 23 + pupilOffset + eyeOffset, y + 13, 2, 2), pupilColor);
+            
+            // Ноги (анимация ходьбы)
+            float legOffset = (float)Math.Sin(_walkAnimationTimer) * 5f;
+            spriteBatch.Draw(new Rectangle(x + 10, y + 58, 8, 10 + (int)legOffset), robeColor);
+            spriteBatch.Draw(new Rectangle(x + 22, y + 58, 8, 10 - (int)legOffset), robeColor);
+            
+            // Руки
+            float armOffset = (float)Math.Sin(_walkAnimationTimer) * 3f;
+            spriteBatch.Draw(new Rectangle(x + 4, y + 28 + (int)armOffset, 6, 15), robeColor);
+            spriteBatch.Draw(new Rectangle(x + 30, y + 28 - (int)armOffset, 6, 15), robeColor);
+            
+            // Эффект свечения (аура)
+            Color auraColor = new Color(180, 100, 255, 80);
+            spriteBatch.Draw(new Rectangle(x - 3, y - 3, Width + 6, Height + 6), auraColor);
         }
     }
 }
