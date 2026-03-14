@@ -12,22 +12,21 @@ namespace PurpleLord.Entities
         private KeyboardState _previousKeyboardState;
         private List<Rectangle> _platforms;
         
-        private float _moveSpeed = 300f;
-        private float _jumpForce = -550f;
-        private float _gravity = 1500f;
+        private float _moveSpeed = 250f;
+        private float _jumpForce = -500f;
+        private float _gravity = 1200f;
         private bool _isGrounded = false;
         private int _jumpCount = 0;
         private int _maxJumps = 2;
         
-        // Анимация
         private float _walkAnimationTimer = 0f;
         private bool _facingRight = true;
         
         public Player(Vector2 position, List<Rectangle> platforms) : base(position)
         {
             _platforms = platforms;
-            Width = 40;
-            Height = 60;
+            Width = 36;
+            Height = 56;
         }
         
         public override void Update(GameTime gameTime)
@@ -35,7 +34,7 @@ namespace PurpleLord.Entities
             float deltaTime = (float)gameTime.ElapsedGameTime.TotalSeconds;
             KeyboardState keyboardState = Keyboard.GetState();
             
-            // Движение
+            // === ДВИЖЕНИЕ ===
             float moveX = 0;
             if (keyboardState.IsKeyDown(Keys.A) || keyboardState.IsKeyDown(Keys.Left))
             {
@@ -48,12 +47,19 @@ namespace PurpleLord.Entities
                 _facingRight = true;
             }
             
+            // Применяем горизонтальную скорость
             Velocity = new Vector2(moveX * _moveSpeed, Velocity.Y);
+            
+            // Гравитация
             Velocity = new Vector2(Velocity.X, Velocity.Y + _gravity * deltaTime);
             
-            // Прыжок
-            if ((keyboardState.IsKeyDown(Keys.Space) || keyboardState.IsKeyDown(Keys.W)) &&
-                !_previousKeyboardState.IsKeyDown(Keys.Space) && !_previousKeyboardState.IsKeyDown(Keys.W))
+            // === ПРЫЖОК ===
+            bool jumpPressed = keyboardState.IsKeyDown(Keys.Space) || keyboardState.IsKeyDown(Keys.W);
+            bool jumpJustPressed = jumpPressed && 
+                !_previousKeyboardState.IsKeyDown(Keys.Space) && 
+                !_previousKeyboardState.IsKeyDown(Keys.W);
+            
+            if (jumpJustPressed)
             {
                 if (_isGrounded)
                 {
@@ -68,27 +74,26 @@ namespace PurpleLord.Entities
                 }
             }
             
+            // === ПРИМЕНЯЕМ СКОРОСТЬ ===
             Position = new Vector2(Position.X + Velocity.X * deltaTime, Position.Y + Velocity.Y * deltaTime);
+            
+            // === КОЛЛИЗИИ ===
             CheckCollisions();
             
-            // Границы мира
+            // === ГРАНИЦЫ МИРА ===
             if (Position.X < 0) Position = new Vector2(0, Position.Y);
             if (Position.Y > 1000)
             {
-                Position = new Vector2(100, 550);
+                Position = new Vector2(100, 520);
                 Velocity = Vector2.Zero;
                 _jumpCount = 0;
             }
             
-            // Анимация ходьбы
+            // === АНИМАЦИЯ ===
             if (moveX != 0 && _isGrounded)
-            {
-                _walkAnimationTimer += deltaTime * 10f;
-            }
+                _walkAnimationTimer += deltaTime * 8f;
             else
-            {
                 _walkAnimationTimer = 0f;
-            }
             
             _previousKeyboardState = keyboardState;
         }
@@ -97,22 +102,28 @@ namespace PurpleLord.Entities
         {
             _isGrounded = false;
             
+            Rectangle playerBounds = Bounds;
+            
             foreach (var platform in _platforms)
             {
-                if (Bounds.Intersects(platform))
+                if (playerBounds.Intersects(platform))
                 {
-                    float overlapLeft = platform.Right - Bounds.Left;
-                    float overlapRight = Bounds.Right - platform.Left;
-                    float overlapTop = platform.Bottom - Bounds.Top;
-                    float overlapBottom = Bounds.Bottom - platform.Top;
+                    // Вычисляем перекрытия с каждой стороны
+                    float overlapLeft = platform.Right - playerBounds.Left;
+                    float overlapRight = playerBounds.Right - platform.Left;
+                    float overlapTop = platform.Bottom - playerBounds.Top;
+                    float overlapBottom = playerBounds.Bottom - platform.Top;
                     
+                    // Находим минимальное перекрытие
                     float minOverlap = Math.Min(
                         Math.Min(overlapLeft, overlapRight),
                         Math.Min(overlapTop, overlapBottom)
                     );
                     
+                    // Определяем направление коллизии и исправляем позицию
                     if (minOverlap == overlapTop && Velocity.Y >= 0)
                     {
+                        // Приземление на платформу
                         Position = new Vector2(Position.X, platform.Top - Height);
                         Velocity = new Vector2(Velocity.X, 0);
                         _isGrounded = true;
@@ -120,16 +131,19 @@ namespace PurpleLord.Entities
                     }
                     else if (minOverlap == overlapBottom && Velocity.Y < 0)
                     {
+                        // Удар головой
                         Position = new Vector2(Position.X, platform.Bottom);
                         Velocity = new Vector2(Velocity.X, 0);
                     }
                     else if (minOverlap == overlapLeft && Velocity.X > 0)
                     {
+                        // Столкновение слева
                         Position = new Vector2(platform.Right, Position.Y);
                         Velocity = new Vector2(0, Velocity.Y);
                     }
                     else if (minOverlap == overlapRight && Velocity.X < 0)
                     {
+                        // Столкновение справа
                         Position = new Vector2(platform.Left - Width, Position.Y);
                         Velocity = new Vector2(0, Velocity.Y);
                     }
@@ -142,45 +156,47 @@ namespace PurpleLord.Entities
             int x = (int)Position.X;
             int y = (int)Position.Y;
             
-            // Цвет игрока - фиолетовый лорд
             Color bodyColor = new Color(138, 43, 226);
             Color robeColor = new Color(100, 30, 180);
             Color skinColor = new Color(255, 220, 180);
             Color eyeColor = Color.White;
             Color pupilColor = Color.Black;
             
-            // Тело (мантия)
-            spriteBatch.Draw(new Rectangle(x + 8, y + 25, 24, 35), robeColor);
+            // Анимация покачивания при ходьбе
+            float bounce = (float)Math.Sin(_walkAnimationTimer) * 2f;
             
-            // Голова
-            spriteBatch.Draw(new Rectangle(x + 10, y + 5, 20, 20), skinColor);
+            // === ТЕЛО (мантия) ===
+            spriteBatch.Draw(new Rectangle(x + 6, y + 22 + (int)bounce, 24, 34), robeColor);
             
-            // Капюшон
-            spriteBatch.Draw(new Rectangle(x + 8, y + 3, 24, 12), robeColor);
+            // === ГОЛОВА ===
+            spriteBatch.Draw(new Rectangle(x + 8, y + 2, 20, 20), skinColor);
             
-            // Глаза (направлены в сторону движения)
+            // === КАПЮШОН ===
+            spriteBatch.Draw(new Rectangle(x + 6, y, 24, 12), robeColor);
+            
+            // === ГЛАЗА ===
             int eyeOffset = _facingRight ? 2 : -2;
-            spriteBatch.Draw(new Rectangle(x + 14 + eyeOffset, y + 12, 5, 5), eyeColor);
-            spriteBatch.Draw(new Rectangle(x + 22 + eyeOffset, y + 12, 5, 5), eyeColor);
+            spriteBatch.Draw(new Rectangle(x + 12 + eyeOffset, y + 8, 5, 5), eyeColor);
+            spriteBatch.Draw(new Rectangle(x + 20 + eyeOffset, y + 8, 5, 5), eyeColor);
             
             // Зрачки
             int pupilOffset = _facingRight ? 1 : -1;
-            spriteBatch.Draw(new Rectangle(x + 15 + pupilOffset + eyeOffset, y + 13, 2, 2), pupilColor);
-            spriteBatch.Draw(new Rectangle(x + 23 + pupilOffset + eyeOffset, y + 13, 2, 2), pupilColor);
+            spriteBatch.Draw(new Rectangle(x + 13 + pupilOffset + eyeOffset, y + 9, 2, 2), pupilColor);
+            spriteBatch.Draw(new Rectangle(x + 21 + pupilOffset + eyeOffset, y + 9, 2, 2), pupilColor);
             
-            // Ноги (анимация ходьбы)
-            float legOffset = (float)Math.Sin(_walkAnimationTimer) * 5f;
-            spriteBatch.Draw(new Rectangle(x + 10, y + 58, 8, 10 + (int)legOffset), robeColor);
-            spriteBatch.Draw(new Rectangle(x + 22, y + 58, 8, 10 - (int)legOffset), robeColor);
+            // === НОГИ (анимация) ===
+            float legOffset = (float)Math.Sin(_walkAnimationTimer) * 6f;
+            spriteBatch.Draw(new Rectangle(x + 8, y + 54, 8, 10 + (int)legOffset), robeColor);
+            spriteBatch.Draw(new Rectangle(x + 20, y + 54, 8, 10 - (int)legOffset), robeColor);
             
-            // Руки
-            float armOffset = (float)Math.Sin(_walkAnimationTimer) * 3f;
-            spriteBatch.Draw(new Rectangle(x + 4, y + 28 + (int)armOffset, 6, 15), robeColor);
-            spriteBatch.Draw(new Rectangle(x + 30, y + 28 - (int)armOffset, 6, 15), robeColor);
+            // === РУКИ ===
+            float armOffset = (float)Math.Sin(_walkAnimationTimer) * 4f;
+            spriteBatch.Draw(new Rectangle(x + 2, y + 24 + (int)armOffset, 6, 14), robeColor);
+            spriteBatch.Draw(new Rectangle(x + 28, y + 24 - (int)armOffset, 6, 14), robeColor);
             
-            // Эффект свечения (аура)
-            Color auraColor = new Color(180, 100, 255, 80);
-            spriteBatch.Draw(new Rectangle(x - 3, y - 3, Width + 6, Height + 6), auraColor);
+            // === АУРА (свечение) ===
+            Color auraColor = new Color(180, 100, 255, 60);
+            spriteBatch.Draw(new Rectangle(x - 4, y - 4, Width + 8, Height + 8), auraColor);
         }
     }
 }
