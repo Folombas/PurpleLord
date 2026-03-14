@@ -18,9 +18,7 @@ namespace PurpleLord.Core
         
         public Matrix GetViewMatrix()
         {
-            return Matrix.CreateTranslation(new Vector3(-Position.X, -Position.Y, 0)) *
-                   Matrix.CreateScale(Zoom, Zoom, 1) *
-                   Matrix.CreateTranslation(new Vector3(_viewport.Width * 0.5f, _viewport.Height * 0.5f, 0));
+            return Matrix.CreateTranslation(new Vector3(-Position.X, -Position.Y, 0));
         }
     }
 }

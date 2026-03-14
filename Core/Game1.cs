@@ -15,17 +15,22 @@ namespace PurpleLord
 
         private Player _player;
         private Camera2D _camera;
-        private List<Rectangle> _platforms;
+        private List<Platform> _platforms;
         
         // Декорации
         private List<Cloud> _clouds;
-        private List<Seagull> _seagulls;
+        private List<Bird> _birds;
         private List<PalmTree> _palmTrees;
         private List<House> _houses;
         private List<SmokeParticle> _smokeParticles;
+        private List<Flower> _flowers;
         
         // Солнце
         private Vector2 _sunPosition = new Vector2(100, 80);
+        
+        // Размеры мира
+        private const int WORLD_WIDTH = 3000;
+        private const int GROUND_Y = 580;
         
         // Цвета
         private Color _skyColor = new Color(135, 206, 235);
@@ -33,13 +38,13 @@ namespace PurpleLord
         private Color _mountainColor = new Color(100, 100, 150);
         private Color _grassColor = new Color(34, 139, 34);
         private Color _dirtColor = new Color(139, 90, 43);
-        private Color _sunColor = new Color(255, 255, 0);
+        private Color _sunColor = new Color(255, 220, 0);
 
         public Game1()
         {
             _graphics = new GraphicsDeviceManager(this);
             Content.RootDirectory = "Content";
-            IsMouseVisible = true;
+            IsMouseVisible = false;
 
             _graphics.PreferredBackBufferWidth = 1280;
             _graphics.PreferredBackBufferHeight = 720;
@@ -50,66 +55,90 @@ namespace PurpleLord
 
         protected override void Initialize()
         {
+            // === КАМЕРА ===
             _camera = new Camera2D(GraphicsDevice.Viewport);
 
-            // === ПЛАТФОРМЫ (земля с травой) ===
-            _platforms = new List<Rectangle>
+            // === ПЛАТФОРМЫ И ЗЕМЛЯ ===
+            _platforms = new List<Platform>();
+            
+            // Основная земля (вся длина мира)
+            _platforms.Add(new Platform(0, GROUND_Y, WORLD_WIDTH, 200, true));
+            
+            // Платформы в воздухе (разбросаны по миру)
+            _platforms.Add(new Platform(250, 480, 120, 25, false));
+            _platforms.Add(new Platform(450, 400, 140, 25, false));
+            _platforms.Add(new Platform(680, 320, 100, 25, false));
+            _platforms.Add(new Platform(850, 420, 130, 25, false));
+            _platforms.Add(new Platform(1100, 350, 150, 25, false));
+            _platforms.Add(new Platform(1350, 280, 120, 25, false));
+            _platforms.Add(new Platform(1550, 380, 140, 25, false));
+            _platforms.Add(new Platform(1800, 300, 130, 25, false));
+            _platforms.Add(new Platform(2000, 420, 160, 25, false));
+            _platforms.Add(new Platform(2250, 350, 120, 25, false));
+            _platforms.Add(new Platform(2450, 280, 140, 25, false));
+            _platforms.Add(new Platform(2700, 400, 150, 25, false));
+
+            // === ИГРОК (на земле, слева) ===
+            _player = new Player(new Vector2(150, GROUND_Y - 60));
+
+            // === ПАЛЬМЫ (расставлены по миру) ===
+            _palmTrees = new List<PalmTree>
             {
-                // Основная земля (длинная)
-                new Rectangle(0, 600, 800, 120),
-                
-                // Платформы в воздухе
-                new Rectangle(200, 500, 120, 25),
-                new Rectangle(400, 430, 150, 25),
-                new Rectangle(600, 350, 120, 25),
-                
-                // Вторая земля справа
-                new Rectangle(900, 600, 600, 120),
-                
-                // Платформы справа
-                new Rectangle(1000, 500, 130, 25),
-                new Rectangle(1200, 420, 140, 25),
-                new Rectangle(1400, 340, 100, 25),
+                new PalmTree(new Vector2(100, GROUND_Y - 90)),
+                new PalmTree(new Vector2(600, GROUND_Y - 90)),
+                new PalmTree(new Vector2(1400, GROUND_Y - 90)),
+                new PalmTree(new Vector2(2100, GROUND_Y - 90)),
+                new PalmTree(new Vector2(2800, GROUND_Y - 90)),
             };
 
-            // Игрок НА земле, не в воздухе!
-            _player = new Player(new Vector2(100, 520), _platforms);
+            // === ДОМИКИ (деревня справа) ===
+            _houses = new List<House>
+            {
+                new House(new Vector2(950, GROUND_Y - 70), new Color(220, 200, 170)),
+                new House(new Vector2(1080, GROUND_Y - 70), new Color(200, 180, 150)),
+                new House(new Vector2(1200, GROUND_Y - 70), new Color(210, 190, 160)),
+            };
+
+            // === ЦВЕТЫ (украшают землю) ===
+            _flowers = new List<Flower>();
+            var random = new Random();
+            for (int i = 0; i < 40; i++)
+            {
+                int x = random.Next(50, WORLD_WIDTH - 50);
+                // Не ставим цветы на домах
+                bool onHouse = false;
+                foreach (var house in _houses)
+                {
+                    if (x > house.Position.X - 20 && x < house.Position.X + house.Width + 20)
+                        onHouse = true;
+                }
+                if (!onHouse)
+                {
+                    _flowers.Add(new Flower(new Vector2(x, GROUND_Y - 12), 
+                        random.Next(0, 3) == 0 ? Color.Red : 
+                        random.Next(0, 2) == 0 ? Color.Yellow : Color.Pink));
+                }
+            }
 
             // === ОБЛАКА ===
             _clouds = new List<Cloud>();
-            var random = new Random();
-            for (int i = 0; i < 6; i++)
+            for (int i = 0; i < 8; i++)
             {
                 _clouds.Add(new Cloud(
-                    new Vector2(random.Next(0, 1800), random.Next(30, 200)),
-                    0.5f + random.NextSingle() * 0.5f
+                    new Vector2(random.Next(0, WORLD_WIDTH), random.Next(30, 200)),
+                    20f + random.NextSingle() * 20f
                 ));
             }
 
-            // === ЧАЙКИ ===
-            _seagulls = new List<Seagull>();
-            for (int i = 0; i < 4; i++)
+            // === ПТИЦЫ ===
+            _birds = new List<Bird>();
+            for (int i = 0; i < 6; i++)
             {
-                _seagulls.Add(new Seagull(
-                    new Vector2(random.Next(300, 1500), random.Next(80, 250)),
-                    30f + random.NextSingle() * 30f
+                _birds.Add(new Bird(
+                    new Vector2(random.Next(200, WORLD_WIDTH - 200), random.Next(80, 250)),
+                    50f + random.NextSingle() * 50f
                 ));
             }
-
-            // === ПАЛЬМЫ ===
-            _palmTrees = new List<PalmTree>
-            {
-                new PalmTree(new Vector2(50, 500)),
-                new PalmTree(new Vector2(1350, 500)),
-            };
-
-            // === ДОМИКИ ===
-            _houses = new List<House>
-            {
-                new House(new Vector2(700, 540), new Color(200, 180, 150)),
-                new House(new Vector2(1100, 540), new Color(180, 160, 140)),
-                new House(new Vector2(1300, 540), new Color(190, 170, 150)),
-            };
 
             // === ДЫМ ===
             _smokeParticles = new List<SmokeParticle>();
@@ -126,42 +155,46 @@ namespace PurpleLord
         {
             float delta = (float)gameTime.ElapsedGameTime.TotalSeconds;
 
+            // Выход по Escape
             if (Keyboard.GetState().IsKeyDown(Keys.Escape))
                 Exit();
 
-            _player.Update(gameTime);
+            // Обновление игрока
+            _player.Update(gameTime, _platforms);
 
-            // Камера следует за игроком
-            float cameraX = Math.Max(0, _player.Position.X - 500);
-            _camera.Position = new Vector2(cameraX, 0);
+            // КАМЕРА СЛЕДУЕТ ЗА ИГРОКОМ (плавно)
+            float targetX = _player.Position.X - GraphicsDevice.Viewport.Width / 2;
+            targetX = Math.Max(0, Math.Min(targetX, WORLD_WIDTH - GraphicsDevice.Viewport.Width));
+            _camera.Position = new Vector2(targetX, 0);
 
             // Обновление декораций
             foreach (var cloud in _clouds)
-                cloud.Update(delta);
+                cloud.Update(delta, WORLD_WIDTH);
             
-            foreach (var seagull in _seagulls)
-                seagull.Update(delta);
+            foreach (var bird in _birds)
+                bird.Update(delta);
 
-            // Обновление дыма
+            // Дым из труб
             UpdateSmoke(delta);
 
             base.Update(gameTime);
         }
 
+        private Random _random = new Random();
+        
         private void UpdateSmoke(float delta)
         {
-            // Добавляем дым из труб домов
             foreach (var house in _houses)
             {
-                if (random.NextSingle() < 0.3f)
+                if (_random.NextSingle() < 0.15f)
                 {
                     _smokeParticles.Add(new SmokeParticle(
-                        new Vector2(house.Position.X + house.Width / 2 + random.Next(-5, 5), house.Position.Y - 20)
+                        new Vector2(house.Position.X + house.Width / 2 + _random.Next(-3, 3), 
+                                   house.Position.Y - 25)
                     ));
                 }
             }
 
-            // Обновляем частицы
             for (int i = _smokeParticles.Count - 1; i >= 0; i--)
             {
                 _smokeParticles[i].Update(delta);
@@ -170,36 +203,35 @@ namespace PurpleLord
             }
         }
 
-        private Random random = new Random();
-
         protected override void Draw(GameTime gameTime)
         {
             GraphicsDevice.Clear(_skyColor);
 
             _spriteBatch.Begin(transformMatrix: _camera.GetViewMatrix());
 
-            // === ЗАДНИЙ ПЛАН ===
+            // === ЗАДНИЙ ПЛАН (дальний) ===
             
-            // Солнце (жёлтый круг)
+            // Солнце
             DrawSun(_sunPosition);
 
-            // Море на горизонте
-            _spriteBatch.Draw(
-                new Rectangle(1600, 560, 800, 60),
-                _seaColor
-            );
+            // Море на горизонте (справа)
+            _spriteBatch.Draw(new Rectangle(2600, GROUND_Y - 40, 600, 60), _seaColor);
 
-            // Горы вдалеке
-            DrawMountains(1400, 560);
-            DrawMountains(1700, 560);
+            // Горы (на заднем плане)
+            DrawMountains(2400, GROUND_Y - 40);
+            DrawMountains(2700, GROUND_Y - 40);
 
             // === ОБЛАКА ===
             foreach (var cloud in _clouds)
                 cloud.Draw(_spriteBatch);
 
-            // === ЧАЙКИ ===
-            foreach (var seagull in _seagulls)
-                seagull.Draw(_spriteBatch);
+            // === ПТИЦЫ ===
+            foreach (var bird in _birds)
+                bird.Draw(_spriteBatch);
+
+            // === ЦВЕТЫ ===
+            foreach (var flower in _flowers)
+                flower.Draw(_spriteBatch);
 
             // === ДОМИКИ ===
             foreach (var house in _houses)
@@ -213,66 +245,46 @@ namespace PurpleLord
             foreach (var palm in _palmTrees)
                 palm.Draw(_spriteBatch);
 
-            // === ПЛАТФОРМЫ (земля с травой) ===
+            // === ПЛАТФОРМЫ ===
             foreach (var platform in _platforms)
-            {
-                // Трава (верхний слой, 8 пикселей)
-                _spriteBatch.Draw(
-                    new Rectangle(platform.X, platform.Y, platform.Width, 8),
-                    _grassColor
-                );
-                
-                // Земля (нижний слой)
-                _spriteBatch.Draw(
-                    new Rectangle(platform.X, platform.Y + 8, platform.Width, platform.Height - 8),
-                    _dirtColor
-                );
-
-                // Детали травы (маленькие кустики сверху)
-                for (int i = 0; i < platform.Width; i += 12)
-                {
-                    _spriteBatch.Draw(
-                        new Rectangle(platform.X + i, platform.Y - 4, 3, 8),
-                        new Color(0, 180, 0)
-                    );
-                }
-            }
+                platform.Draw(_spriteBatch);
 
             // === ИГРОК ===
             _player.Draw(_spriteBatch, gameTime);
 
             _spriteBatch.End();
 
+            // === UI (без камеры) ===
+            DrawUI();
+
             base.Draw(gameTime);
         }
 
         private void DrawSun(Vector2 position)
         {
-            int radius = 35;
+            int radius = 40;
             
-            // Рисуем круг солнца через множество маленьких прямоугольников
-            for (int angle = 0; angle < 360; angle += 5)
+            // Лучи солнца
+            for (int i = 0; i < 12; i++)
             {
-                float rad = angle * (float)Math.PI / 180f;
-                float x = position.X + (float)Math.Cos(rad) * radius;
-                float y = position.Y + (float)Math.Sin(rad) * radius;
-                
-                // Лучи солнца
+                float angle = i * MathHelper.Pi / 6;
+                float rayX = position.X + (float)Math.Cos(angle) * (radius + 15);
+                float rayY = position.Y + (float)Math.Sin(angle) * (radius + 15);
                 _spriteBatch.Draw(
-                    new Rectangle((int)x, (int)y, 3, 3),
+                    new Rectangle((int)rayX - 2, (int)rayY - 2, 4, 4),
                     new Color(255, 255, 200)
                 );
             }
             
-            // Центр солнца (полный круг)
-            for (int y = -radius; y <= radius; y++)
+            // Центр солнца (закрашенный круг)
+            for (int y = -radius; y <= radius; y += 3)
             {
-                for (int x = -radius; x <= radius; x++)
+                for (int x = -radius; x <= radius; x += 3)
                 {
                     if (x * x + y * y <= radius * radius)
                     {
                         _spriteBatch.Draw(
-                            new Rectangle((int)position.X + x, (int)position.Y + y, 2, 2),
+                            new Rectangle((int)position.X + x, (int)position.Y + y, 3, 3),
                             _sunColor
                         );
                     }
@@ -282,14 +294,13 @@ namespace PurpleLord
 
         private void DrawMountains(int startX, int baseY)
         {
-            for (int i = 0; i < 4; i++)
+            for (int i = 0; i < 5; i++)
             {
-                int peakX = startX + i * 120;
-                int peakHeight = 60 + (i % 2) * 40;
+                int peakX = startX + i * 100;
+                int peakHeight = 50 + (i % 3) * 30;
+                int width = 80;
                 
-                // Рисуем треугольную гору
-                int width = 100;
-                for (int y = 0; y < peakHeight; y++)
+                for (int y = 0; y < peakHeight; y += 2)
                 {
                     int rowWidth = width * (peakHeight - y) / peakHeight;
                     _spriteBatch.Draw(
@@ -299,84 +310,165 @@ namespace PurpleLord
                 }
             }
         }
+
+        private void DrawUI()
+        {
+            _spriteBatch.Begin();
+            
+            // Заголовок
+            DrawText("Purple Lord", new Vector2(15, 15), Color.Purple, 1.3f);
+            DrawText("Path of Choices", new Vector2(15, 42), Color.DarkBlue, 0.8f);
+            
+            // Управление
+            string controls = "A/D ←→ | Пробел Прыжок | Escape Выход";
+            DrawText(controls, new Vector2(15, 700), Color.Black, 0.7f);
+            
+            // Позиция в мире
+            string position = $"Позиция: {(int)_player.Position.X} / {WORLD_WIDTH}";
+            DrawText(position, new Vector2(1100, 15), Color.DarkGreen, 0.7f);
+            
+            _spriteBatch.End();
+        }
+
+        private void DrawText(string text, Vector2 position, Color color, float scale)
+        {
+            // Простая отрисовка текста через прямоугольники (пиксельный шрифт)
+            int x = (int)position.X;
+            int y = (int)position.Y;
+            int charSpacing = 8;
+            
+            foreach (char c in text)
+            {
+                if (c == ' ')
+                {
+                    x += charSpacing;
+                    continue;
+                }
+                
+                // Рисуем символ как простой прямоугольник (заглушка)
+                _spriteBatch.Draw(new Rectangle(x, y, 6, 8), color);
+                x += charSpacing;
+            }
+        }
     }
 
-    // === Классы декораций ===
+    // ==================== КЛАССЫ ИГРЫ ====================
+
+    public class Platform
+    {
+        public Rectangle Bounds;
+        public bool IsGround;
+
+        public Platform(int x, int y, int width, int height, bool isGround)
+        {
+            Bounds = new Rectangle(x, y, width, height);
+            IsGround = isGround;
+        }
+
+        public void Draw(SpriteBatch spriteBatch)
+        {
+            if (IsGround)
+            {
+                // Трава
+                spriteBatch.Draw(new Rectangle(Bounds.X, Bounds.Y, Bounds.Width, 10), _grassColor);
+                
+                // Земля
+                spriteBatch.Draw(new Rectangle(Bounds.X, Bounds.Y + 10, Bounds.Width, Bounds.Height - 10), _dirtColor);
+                
+                // Детали травы
+                for (int i = 0; i < Bounds.Width; i += 15)
+                {
+                    spriteBatch.Draw(new Rectangle(Bounds.X + i, Bounds.Y - 5, 4, 8), new Color(0, 180, 0));
+                }
+                
+                // Детали земли (камешки)
+                for (int i = 0; i < Bounds.Width; i += 40)
+                {
+                    spriteBatch.Draw(new Rectangle(Bounds.X + i + 10, Bounds.Y + 30, 6, 4), new Color(120, 70, 30));
+                }
+            }
+            else
+            {
+                // Платформа в воздухе
+                spriteBatch.Draw(new Rectangle(Bounds.X, Bounds.Y, Bounds.Width, 8), _grassColor);
+                spriteBatch.Draw(new Rectangle(Bounds.X, Bounds.Y + 8, Bounds.Width, Bounds.Height - 8), _dirtColor);
+            }
+        }
+
+        private Color _grassColor = new Color(34, 139, 34);
+        private Color _dirtColor = new Color(139, 90, 43);
+    }
 
     public class Cloud
     {
         public Vector2 Position;
         public float Speed;
-        public float Scale;
+        private float _scale;
 
-        public Cloud(Vector2 position, float scale)
+        public Cloud(Vector2 position, float speed)
         {
             Position = position;
-            Scale = scale;
-            Speed = 15f + scale * 10f;
+            Speed = speed;
+            _scale = 0.8f + (speed / 40f);
         }
 
-        public void Update(float delta)
+        public void Update(float delta, int worldWidth)
         {
             Position.X += Speed * delta;
-            if (Position.X > 2200)
+            if (Position.X > worldWidth + 200)
                 Position.X = -200;
         }
 
         public void Draw(SpriteBatch spriteBatch)
         {
-            Color cloudColor = new Color(255, 255, 255, 220);
+            Color cloudColor = new Color(255, 255, 255, 230);
             
-            // Три овала для облака
-            spriteBatch.Draw(new Rectangle((int)Position.X, (int)Position.Y, 70, 35), cloudColor);
-            spriteBatch.Draw(new Rectangle((int)Position.X + 30, (int)Position.Y - 20, 55, 45), cloudColor);
-            spriteBatch.Draw(new Rectangle((int)Position.X + 70, (int)Position.Y, 65, 35), cloudColor);
+            spriteBatch.Draw(new Rectangle((int)Position.X, (int)Position.Y, 80, 40), cloudColor);
+            spriteBatch.Draw(new Rectangle((int)Position.X + 35, (int)Position.Y - 25, 65, 50), cloudColor);
+            spriteBatch.Draw(new Rectangle((int)Position.X + 80, (int)Position.Y, 75, 40), cloudColor);
         }
     }
 
-    public class Seagull
+    public class Bird
     {
         public Vector2 Position;
         public float Speed;
         private float _wingAngle;
         private float _startX;
+        private float _amplitude;
 
-        public Seagull(Vector2 position, float speed)
+        public Bird(Vector2 position, float speed)
         {
             Position = position;
             _startX = position.X;
             Speed = speed;
+            _amplitude = 100f + (speed / 2f);
         }
 
         public void Update(float delta)
         {
-            _wingAngle += 12f * delta;
-            
-            // Чайка летает туда-сюда
-            Position.X += (float)Math.Sin(_wingAngle * 0.5f) * Speed * delta;
-            
+            _wingAngle += 10f * delta;
+            Position.X += (float)Math.Sin(_wingAngle * 0.3f) * Speed * delta;
+
             // Ограничиваем полёт
-            if (Position.X < _startX - 200) Position.X = _startX - 200;
-            if (Position.X > _startX + 200) Position.X = _startX + 200;
+            if (Position.X < _startX - _amplitude) Position.X = _startX - _amplitude;
+            if (Position.X > _startX + _amplitude) Position.X = _startX + _amplitude;
         }
 
         public void Draw(SpriteBatch spriteBatch)
         {
             Color white = Color.White;
-            float wingOffset = (float)Math.Sin(_wingAngle) * 6f;
+            float wingOffset = (float)Math.Sin(_wingAngle) * 8f;
             
-            // Тело
-            spriteBatch.Draw(new Rectangle((int)Position.X, (int)Position.Y, 14, 3), white);
-            
-            // Крылья (V-образно)
-            spriteBatch.Draw(new Rectangle((int)Position.X + 2, (int)Position.Y - 5 + (int)wingOffset, 10, 2), white);
+            spriteBatch.Draw(new Rectangle((int)Position.X, (int)Position.Y, 16, 3), white);
+            spriteBatch.Draw(new Rectangle((int)Position.X + 3, (int)Position.Y - 6 + (int)wingOffset, 10, 2), white);
         }
     }
 
     public class PalmTree
     {
         public Vector2 Position;
-        public float Height = 90f;
+        private float _height = 100f;
 
         public PalmTree(Vector2 position)
         {
@@ -386,31 +478,26 @@ namespace PurpleLord
         public void Draw(SpriteBatch spriteBatch)
         {
             Color trunkColor = new Color(101, 67, 33);
-            Color leafColor = new Color(0, 140, 0);
+            Color leafColor = new Color(0, 150, 0);
 
-            // Ствол (немного изогнутый)
-            spriteBatch.Draw(new Rectangle((int)Position.X, (int)Position.Y, 14, (int)Height), trunkColor);
+            // Ствол
+            spriteBatch.Draw(new Rectangle((int)Position.X, (int)Position.Y, 16, (int)_height), trunkColor);
 
-            // Листья веером
-            float topX = Position.X + 7;
+            // Листья
+            float topX = Position.X + 8;
             float topY = Position.Y;
 
             for (int i = 0; i < 7; i++)
             {
                 float angle = 1.57f + (i - 3) * 0.35f;
-                float length = 40f + (i % 3) * 10f;
+                float length = 45f + (i % 3) * 12f;
                 
-                float endX = topX + (float)Math.Cos(angle) * length;
-                float endY = topY - (float)Math.Sin(angle) * length;
-                
-                // Рисуем лист как линию из прямоугольников
-                int steps = (int)(length / 8);
-                for (int s = 0; s < steps; s++)
+                for (int s = 0; s < (int)(length / 10); s++)
                 {
-                    float sx = topX + (float)Math.Cos(angle) * (s * 8);
-                    float sy = topY - (float)Math.Sin(angle) * (s * 8);
-                    int size = 6 - s / 2;
-                    if (size < 2) size = 2;
+                    float sx = topX + (float)Math.Cos(angle) * (s * 10);
+                    float sy = topY - (float)Math.Sin(angle) * (s * 10);
+                    int size = 8 - s;
+                    if (size < 3) size = 3;
                     spriteBatch.Draw(new Rectangle((int)sx, (int)sy, size, size), leafColor);
                 }
             }
@@ -420,8 +507,8 @@ namespace PurpleLord
     public class House
     {
         public Vector2 Position;
-        public int Width = 70;
-        public int Height = 50;
+        public int Width = 80;
+        public int Height = 60;
         public Color WallColor;
 
         public House(Vector2 position, Color wallColor)
@@ -433,45 +520,41 @@ namespace PurpleLord
         public void Draw(SpriteBatch spriteBatch)
         {
             Color roofColor = new Color(139, 69, 19);
-            Color windowColor = new Color(100, 150, 200);
+            Color windowColor = new Color(100, 180, 220);
             Color doorColor = new Color(101, 67, 33);
+            Color chimneyColor = new Color(150, 75, 30);
 
             // Стены
             spriteBatch.Draw(new Rectangle((int)Position.X, (int)Position.Y, Width, Height), WallColor);
 
-            // Крыша (треугольная)
-            DrawRoof(spriteBatch, Position.X, Position.Y, Width, roofColor);
-
-            // Окно
-            spriteBatch.Draw(new Rectangle((int)Position.X + 15, (int)Position.Y + 15, 15, 15), windowColor);
-            spriteBatch.Draw(new Rectangle((int)Position.X + 40, (int)Position.Y + 15, 15, 15), windowColor);
-
-            // Дверь
-            spriteBatch.Draw(new Rectangle((int)Position.X + 27, (int)Position.Y + 30, 16, 20), doorColor);
-
-            // Труба
-            spriteBatch.Draw(new Rectangle((int)Position.X + 50, (int)Position.Y - 20, 8, 20), new Color(150, 75, 30));
-        }
-
-        private void DrawRoof(SpriteBatch spriteBatch, float x, float y, int width, Color color)
-        {
-            int roofHeight = 35;
-            for (int row = 0; row < roofHeight; row++)
+            // Крыша
+            int roofHeight = 45;
+            for (int row = 0; row < roofHeight; row += 2)
             {
-                int rowWidth = width + 10 - (row * 2);
+                int rowWidth = Width + 20 - (row * 2);
                 int xOffset = row;
                 spriteBatch.Draw(
-                    new Rectangle((int)x - xOffset, (int)y - row, rowWidth, 2),
-                    color
+                    new Rectangle((int)Position.X - xOffset, (int)Position.Y - row, rowWidth, 2),
+                    roofColor
                 );
             }
+
+            // Окна
+            spriteBatch.Draw(new Rectangle((int)Position.X + 12, (int)Position.Y + 15, 18, 18), windowColor);
+            spriteBatch.Draw(new Rectangle((int)Position.X + 50, (int)Position.Y + 15, 18, 18), windowColor);
+
+            // Дверь
+            spriteBatch.Draw(new Rectangle((int)Position.X + 30, (int)Position.Y + 35, 20, 25), doorColor);
+
+            // Труба
+            spriteBatch.Draw(new Rectangle((int)Position.X + 60, (int)Position.Y - 25, 10, 25), chimneyColor);
         }
     }
 
     public class SmokeParticle
     {
         public Vector2 Position;
-        public float Life = 2f;
+        public float Life = 2.5f;
         public float MaxLife;
         public Vector2 Velocity;
 
@@ -479,26 +562,53 @@ namespace PurpleLord
         {
             Position = position;
             MaxLife = Life;
-            Velocity = new Vector2(0, -15f);
+            Velocity = new Vector2(0, -12f);
         }
 
         public void Update(float delta)
         {
             Position += Velocity * delta;
-            Velocity.X += (float)(new Random().NextDouble() - 0.5) * 10f * delta;
+            Velocity.X += (float)(new Random().NextDouble() - 0.5) * 8f * delta;
             Life -= delta;
         }
 
         public void Draw(SpriteBatch spriteBatch)
         {
             float alpha = Life / MaxLife;
-            Color smokeColor = new Color(200, 200, 200, (int)(alpha * 150));
-            int size = (int)(8 + (1 - alpha) * 12);
+            Color smokeColor = new Color(220, 220, 220, (int)(alpha * 180));
+            int size = (int)(10 + (1 - alpha) * 20);
             
             spriteBatch.Draw(
-                new Rectangle((int)Position.X, (int)Position.Y, size, size),
+                new Rectangle((int)Position.X - size/2, (int)Position.Y - size/2, size, size),
                 smokeColor
             );
+        }
+    }
+
+    public class Flower
+    {
+        public Vector2 Position;
+        public Color Color;
+
+        public Flower(Vector2 position, Color color)
+        {
+            Position = position;
+            Color = color;
+        }
+
+        public void Draw(SpriteBatch spriteBatch)
+        {
+            // Стебель
+            spriteBatch.Draw(new Rectangle((int)Position.X, (int)Position.Y, 2, 10), new Color(0, 180, 0));
+            
+            // Лепестки
+            spriteBatch.Draw(new Rectangle((int)Position.X - 4, (int)Position.Y - 4, 3, 3), Color);
+            spriteBatch.Draw(new Rectangle((int)Position.X + 3, (int)Position.Y - 4, 3, 3), Color);
+            spriteBatch.Draw(new Rectangle((int)Position.X - 4, (int)Position.Y + 1, 3, 3), Color);
+            spriteBatch.Draw(new Rectangle((int)Position.X + 3, (int)Position.Y + 1, 3, 3), Color);
+            
+            // Центр
+            spriteBatch.Draw(new Rectangle((int)Position.X - 1, (int)Position.Y - 1, 4, 4), Color.Yellow);
         }
     }
 }
