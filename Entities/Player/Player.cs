@@ -11,6 +11,7 @@ using PurpleLordPlatformer.Core;
 using PurpleLordPlatformer.Managers;
 using PurpleLordPlatformer.Systems.Physics;
 using PurpleLordPlatformer.Systems.Animation;
+using PurpleLordPlatformer.Systems;
 
 namespace PurpleLordPlatformer.Entities.Player
 {
@@ -47,6 +48,9 @@ namespace PurpleLordPlatformer.Entities.Player
         private const float MinFocusMeter = 0f;
         private const float MaxFocusMeter = 100f;
 
+        // Система здоровья / Health system
+        private HealthComponent _health;
+
         // Состояние / State
         private PlayerState _currentState = PlayerState.Idle;
         private PlayerState _previousState = PlayerState.Idle;
@@ -70,6 +74,7 @@ namespace PurpleLordPlatformer.Entities.Player
             Height = 48;
             Velocity = Vector2.Zero;
             _input = new InputManager();
+            _health = new HealthComponent(3);
             InitializeAnimator();
         }
 
@@ -84,6 +89,7 @@ namespace PurpleLordPlatformer.Entities.Player
         {
             float delta = (float)gameTime.ElapsedGameTime.TotalSeconds;
 
+            _health.Update(gameTime);
             HandleInput(delta);
             ApplyPhysics(delta);
             UpdateState();
@@ -307,6 +313,20 @@ namespace PurpleLordPlatformer.Entities.Player
             }
         }
 
+        public void TakeDamage(int damage)
+        {
+            _health.TakeDamage(damage);
+            OnDamageTaken?.Invoke(damage);
+        }
+
+        public void Heal(int amount)
+        {
+            _health.Heal(amount);
+            OnHeal?.Invoke(amount);
+        }
+
+        public bool IsInvincible => _health.IsInvincible;
+
         #region Events | События
 
         public event Action OnJump;
@@ -314,6 +334,9 @@ namespace PurpleLordPlatformer.Entities.Player
         public event Action OnFocusActivated;
         public event Action OnFocusDeactivated;
         public event Action OnLand;
+        public event Action<int> OnDamageTaken;
+        public event Action<int> OnHeal;
+        public event Action OnDeath;
 
         #endregion
 
@@ -325,6 +348,10 @@ namespace PurpleLordPlatformer.Entities.Player
         public float FocusMeter => _focusMeter;
         public float FocusPercent => _focusMeter / MaxFocusMeter * 100f;
         public float FacingDirection => _facingDirection;
+        public int CurrentHealth => _health.CurrentHealth;
+        public int MaxHealth => _health.MaxHealth;
+        public float HealthPercent => _health.HealthPercent;
+        public bool IsAlive => _health.IsAlive;
 
         #endregion
     }

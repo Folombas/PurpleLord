@@ -37,10 +37,58 @@ namespace PurpleLordPlatformer.UI.HUD
 
         public void Draw(SpriteBatch spriteBatch, GameTime gameTime)
         {
+            DrawHealthBar(spriteBatch);
             DrawAwarenessMeter(spriteBatch);
             DrawCompass(spriteBatch);
             DrawKnowledgeCounter(spriteBatch);
             DrawFocusLossIndicator(spriteBatch);
+        }
+
+        private void DrawHealthBar(SpriteBatch spriteBatch)
+        {
+            // Полоска здоровья в левом верхнем углу (под шкалой фокуса)
+            // Health bar in top-left corner (below focus meter)
+            if (_player == null) return;
+
+            float barWidth = 200;
+            float barHeight = 25;
+            Vector2 pos = new Vector2(20, 50);
+
+            // Фон / Background
+            Rectangle bgRect = new Rectangle((int)pos.X, (int)pos.Y, (int)barWidth, (int)barHeight);
+            spriteBatch.Draw(GraphicsUtils.WhiteTexture, bgRect, new Color(50, 50, 50));
+
+            // Заполнение / Fill
+            float fillPercent = _player.HealthPercent;
+            Rectangle fillRect = new Rectangle((int)pos.X, (int)pos.Y, (int)(barWidth * fillPercent), (int)barHeight);
+            
+            // Цвет зависит от здоровья / Color depends on health
+            Color healthColor = fillPercent > 0.6f ? Color.Green : 
+                               (fillPercent > 0.3f ? Color.Yellow : Color.Red);
+            spriteBatch.Draw(GraphicsUtils.WhiteTexture, fillRect, healthColor);
+
+            // Рамка / Border
+            GraphicsUtils.DrawRectangle(spriteBatch, bgRect, Color.White, 2);
+
+            // Сердца / Hearts
+            for (int i = 0; i < _player.MaxHealth; i++)
+            {
+                float heartX = pos.X + 10 + i * 35;
+                float heartY = pos.Y + 3;
+                
+                if (i < _player.CurrentHealth)
+                {
+                    // Заполненное сердце / Filled heart
+                    spriteBatch.Draw(GraphicsUtils.WhiteTexture,
+                        new Rectangle((int)heartX, (int)heartY, 20, 20), Color.Red);
+                }
+                else
+                {
+                    // Пустое сердце / Empty heart
+                    spriteBatch.Draw(GraphicsUtils.WhiteTexture,
+                        new Rectangle((int)heartX, (int)heartY, 20, 20), new Color(80, 80, 80));
+                }
+            }
         }
 
         private void DrawAwarenessMeter(SpriteBatch spriteBatch)
@@ -49,7 +97,7 @@ namespace PurpleLordPlatformer.UI.HUD
             // Awareness meter in top-left corner
             float barWidth = 200;
             float barHeight = 20;
-            Vector2 pos = new Vector2(20, 20);
+            Vector2 pos = new Vector2(20, 85);
 
             // Фон / Background
             Rectangle bgRect = new Rectangle((int)pos.X, (int)pos.Y, (int)barWidth, (int)barHeight);
