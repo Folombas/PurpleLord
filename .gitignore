@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Visual Studio
 .vs/
 *.suo
@@ -105,3 +106,25 @@ Desktop.ini
 *.cache
 *.tmp
 *.temp
+=======
+# MonoGame
+Content/bin/
+Content/obj/
+obj/
+bin/
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+*.cache
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build
+*.exe
+*.dll
+*.pdb
+>>>>>>> 298d2aa9e26c55efb4c968f66277850e4c695877
