@@ -447,6 +447,13 @@ namespace PurpleLordPlatformer.Levels
             Height = 40;
         }
 
+        public NeuronEnemy(Vector2 position, EnemyBehavior behavior)
+            : base(position, EnemyType.Neuron, behavior)
+        {
+            Width = 40;
+            Height = 40;
+        }
+
         public override void Update(GameTime gameTime)
         {
             base.Update(gameTime);
