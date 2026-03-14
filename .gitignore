@@ -1,0 +1,20 @@
+# MonoGame
+Content/bin/
+Content/obj/
+obj/
+bin/
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+*.cache
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build
+*.exe
+*.dll
+*.pdb
