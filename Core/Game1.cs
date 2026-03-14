@@ -25,6 +25,12 @@ namespace PurpleLord
         private List<SmokeParticle> _smokeParticles;
         private List<Flower> _flowers;
         
+        // Новые элементы
+        private List<Wave> _waves;
+        private List<Volcano> _volcanoes;
+        private List<Collectible> _collectibles;
+        private List<Porcupine> _porcupines;
+        
         // Солнце
         private Vector2 _sunPosition = new Vector2(100, 80);
         
@@ -142,6 +148,50 @@ namespace PurpleLord
 
             // === ДЫМ ===
             _smokeParticles = new List<SmokeParticle>();
+            
+            // === ВОЛНЫ (на море) ===
+            _waves = new List<Wave>();
+            for (int i = 0; i < 20; i++)
+            {
+                _waves.Add(new Wave(2600 + i * 35, GROUND_Y - 20 + (i % 3) * 10));
+            }
+            
+            // === ВУЛКАНЫ ===
+            _volcanoes = new List<Volcano>
+            {
+                new Volcano(new Vector2(2500, GROUND_Y - 120)),
+                new Volcano(new Vector2(2750, GROUND_Y - 150))
+            };
+            
+            // === ДИКОБРАЗЫ (ползают по земле) ===
+            _porcupines = new List<Porcupine>();
+            for (int i = 0; i < 8; i++)
+            {
+                int x = random.Next(400, WORLD_WIDTH - 400);
+                // Не ставим дикобразов на старте
+                if (x > 300 && x < 500) x += 500;
+                _porcupines.Add(new Porcupine(new Vector2(x, GROUND_Y - 20)));
+            }
+            
+            // === ПРЕДМЕТЫ ДЛЯ СБОРА (кокосы и бананы на пальмах) ===
+            _collectibles = new List<Collectible>();
+            foreach (var palm in _palmTrees)
+            {
+                // Добавляем кокосы
+                _collectibles.Add(new Collectible(
+                    new Vector2(palm.Position.X + 8, palm.Position.Y - 30),
+                    CollectibleType.Coconut
+                ));
+                // Добавляем бананы
+                _collectibles.Add(new Collectible(
+                    new Vector2(palm.Position.X - 25, palm.Position.Y - 45),
+                    CollectibleType.Banana
+                ));
+                _collectibles.Add(new Collectible(
+                    new Vector2(palm.Position.X + 35, palm.Position.Y - 50),
+                    CollectibleType.Banana
+                ));
+            }
 
             base.Initialize();
         }
@@ -170,14 +220,63 @@ namespace PurpleLord
             // Обновление декораций
             foreach (var cloud in _clouds)
                 cloud.Update(delta, WORLD_WIDTH);
-            
+
             foreach (var bird in _birds)
                 bird.Update(delta);
+            
+            // Обновление волн
+            foreach (var wave in _waves)
+                wave.Update(delta);
+            
+            // Обновление вулканов
+            foreach (var volcano in _volcanoes)
+                volcano.Update(delta);
+            
+            // Обновление дикобразов
+            foreach (var porcupine in _porcupines)
+                porcupine.Update(delta, _platforms);
+            
+            // Проверка сбора предметов
+            CheckCollectibles();
+            
+            // Проверка столкновений с дикобразами
+            CheckPorcupineCollisions();
 
             // Дым из труб
             UpdateSmoke(delta);
 
             base.Update(gameTime);
+        }
+        
+        private void CheckCollectibles()
+        {
+            for (int i = _collectibles.Count - 1; i >= 0; i--)
+            {
+                var collectible = _collectibles[i];
+                if (!collectible.IsCollected)
+                {
+                    // Простая проверка расстояния до игрока
+                    float distance = Vector2.Distance(_player.Position, collectible.Position);
+                    if (distance < 50f)
+                    {
+                        collectible.IsCollected = true;
+                        int xpGain = collectible.Type == CollectibleType.Coconut ? 25 : 15;
+                        _player.CollectItem(xpGain);
+                    }
+                }
+            }
+        }
+        
+        private void CheckPorcupineCollisions()
+        {
+            foreach (var porcupine in _porcupines)
+            {
+                float distance = Vector2.Distance(_player.Position, porcupine.Position);
+                if (distance < 50f && !porcupine.IsDead)
+                {
+                    _player.TakeDamage(porcupine.Position, 20);
+                }
+            }
         }
 
         private Random _random = new Random();
@@ -210,16 +309,24 @@ namespace PurpleLord
             _spriteBatch.Begin(transformMatrix: _camera.GetViewMatrix());
 
             // === ЗАДНИЙ ПЛАН (дальний) ===
-            
+
             // Солнце
             DrawSun(_sunPosition);
 
             // Море на горизонте (справа)
             _spriteBatch.Draw(new Rectangle(2600, GROUND_Y - 40, 600, 60), _seaColor);
+            
+            // === ВОЛНЫ ===
+            foreach (var wave in _waves)
+                wave.Draw(_spriteBatch);
 
             // Горы (на заднем плане)
             DrawMountains(2400, GROUND_Y - 40);
             DrawMountains(2700, GROUND_Y - 40);
+            
+            // === ВУЛКАНЫ ===
+            foreach (var volcano in _volcanoes)
+                volcano.Draw(_spriteBatch);
 
             // === ОБЛАКА ===
             foreach (var cloud in _clouds)
@@ -244,10 +351,18 @@ namespace PurpleLord
             // === ПАЛЬМЫ ===
             foreach (var palm in _palmTrees)
                 palm.Draw(_spriteBatch);
+            
+            // === ПРЕДМЕТЫ ДЛЯ СБОРА ===
+            foreach (var collectible in _collectibles)
+                collectible.Draw(_spriteBatch);
 
             // === ПЛАТФОРМЫ ===
             foreach (var platform in _platforms)
                 platform.Draw(_spriteBatch);
+            
+            // === ДИКОБРАЗЫ ===
+            foreach (var porcupine in _porcupines)
+                porcupine.Draw(_spriteBatch);
 
             // === ИГРОК ===
             _player.Draw(_spriteBatch, gameTime);
@@ -314,19 +429,38 @@ namespace PurpleLord
         private void DrawUI()
         {
             _spriteBatch.Begin();
-            
+
             // Заголовок
             DrawText("Purple Lord", new Vector2(15, 15), Color.Purple, 1.3f);
             DrawText("Path of Choices", new Vector2(15, 42), Color.DarkBlue, 0.8f);
-            
+
             // Управление
             string controls = "A/D ←→ | Пробел Прыжок | Escape Выход";
             DrawText(controls, new Vector2(15, 700), Color.Black, 0.7f);
-            
+
             // Позиция в мире
             string position = $"Позиция: {(int)_player.Position.X} / {WORLD_WIDTH}";
             DrawText(position, new Vector2(1100, 15), Color.DarkGreen, 0.7f);
             
+            // === XP И УРОВЕНЬ ===
+            string xpText = $"XP: {_player.XP}/{_player.XPToNextLevel} | Уровень: {_player.Level}";
+            DrawText(xpText, new Vector2(15, 680), Color.Goldenrod, 0.9f);
+            
+            // Полоска XP
+            int barWidth = 200;
+            int barHeight = 12;
+            float xpPercent = (float)_player.XP / _player.XPToNextLevel;
+            
+            // Фон полоски
+            _spriteBatch.Draw(new Rectangle(15, 660, barWidth, barHeight), new Color(50, 50, 50));
+            // Заполненная часть
+            _spriteBatch.Draw(new Rectangle(15, 660, (int)(barWidth * xpPercent), barHeight), Color.Lime);
+            // Рамка
+            _spriteBatch.Draw(new Rectangle(15, 660, barWidth, 2), Color.White);
+            _spriteBatch.Draw(new Rectangle(15, 660, 2, barHeight), Color.White);
+            _spriteBatch.Draw(new Rectangle(15, 660 + barHeight - 2, barWidth, 2), Color.White);
+            _spriteBatch.Draw(new Rectangle(15 + barWidth - 2, 660, 2, barHeight), Color.White);
+
             _spriteBatch.End();
         }
 
@@ -600,15 +734,352 @@ namespace PurpleLord
         {
             // Стебель
             spriteBatch.Draw(new Rectangle((int)Position.X, (int)Position.Y, 2, 10), new Color(0, 180, 0));
-            
+
             // Лепестки
             spriteBatch.Draw(new Rectangle((int)Position.X - 4, (int)Position.Y - 4, 3, 3), Color);
             spriteBatch.Draw(new Rectangle((int)Position.X + 3, (int)Position.Y - 4, 3, 3), Color);
             spriteBatch.Draw(new Rectangle((int)Position.X - 4, (int)Position.Y + 1, 3, 3), Color);
             spriteBatch.Draw(new Rectangle((int)Position.X + 3, (int)Position.Y + 1, 3, 3), Color);
-            
+
             // Центр
             spriteBatch.Draw(new Rectangle((int)Position.X - 1, (int)Position.Y - 1, 4, 4), Color.Yellow);
+        }
+    }
+    
+    // === ВОЛНЫ С ГРЕБНЯМИ ===
+    public class Wave
+    {
+        public Vector2 Position;
+        private float _phase;
+        private float _speed;
+        private float _amplitude;
+        
+        public Wave(float x, float y)
+        {
+            Position = new Vector2(x, y);
+            _phase = (float)(new Random().NextDouble() * Math.PI * 2);
+            _speed = 1.5f;
+            _amplitude = 8f;
+        }
+        
+        public void Update(float delta)
+        {
+            _phase += _speed * delta;
+        }
+        
+        public void Draw(SpriteBatch spriteBatch)
+        {
+            Color waveColor = new Color(255, 255, 255, 180);
+            Color foamColor = new Color(255, 255, 255, 220);
+            
+            // Рисуем волну синусоидальной формы
+            int waveWidth = 40;
+            float baseY = Position.Y;
+            
+            for (int x = 0; x < waveWidth; x += 3)
+            {
+                float yOffset = (float)Math.Sin(_phase + x * 0.15f) * _amplitude;
+                int height = 8 + (int)(yOffset + _amplitude);
+                
+                // Гребень волны (белая пена)
+                if (yOffset > _amplitude * 0.5f)
+                {
+                    spriteBatch.Draw(new Rectangle((int)Position.X + x, (int)(baseY - height), 4, 3), foamColor);
+                }
+                // Основная часть волны
+                else
+                {
+                    spriteBatch.Draw(new Rectangle((int)Position.X + x, (int)(baseY - height + 3), 4, height - 3), waveColor);
+                }
+            }
+        }
+    }
+    
+    // === ВУЛКАН С ЛАВОЙ ===
+    public class Volcano
+    {
+        public Vector2 Position;
+        private float _eruptionTimer;
+        private List<LavaParticle> _lavaParticles;
+        private Random _random;
+        
+        public Volcano(Vector2 position)
+        {
+            Position = position;
+            _lavaParticles = new List<LavaParticle>();
+            _random = new Random();
+        }
+        
+        public void Update(float delta)
+        {
+            _eruptionTimer += delta;
+            
+            // Периодические извержения
+            if (_eruptionTimer > 2f && _random.NextSingle() < 0.3f)
+            {
+                _eruptionTimer = 0f;
+                // Выброс лавы
+                for (int i = 0; i < 5; i++)
+                {
+                    _lavaParticles.Add(new LavaParticle(
+                        new Vector2(Position.X + _random.Next(-10, 10), Position.Y - 20),
+                        new Vector2(_random.Next(-3, 4), _random.Next(-200, -100))
+                    ));
+                }
+            }
+            
+            // Обновление частиц лавы
+            for (int i = _lavaParticles.Count - 1; i >= 0; i--)
+            {
+                _lavaParticles[i].Update(delta);
+                if (_lavaParticles[i].Life <= 0)
+                    _lavaParticles.RemoveAt(i);
+            }
+        }
+        
+        public void Draw(SpriteBatch spriteBatch)
+        {
+            Color volcanoColor = new Color(80, 60, 40);
+            Color lavaColor = new Color(255, 100, 0);
+            Color glowColor = new Color(255, 200, 50);
+            
+            // Конус вулкана
+            int baseWidth = 120;
+            int height = 100;
+            
+            for (int y = 0; y < height; y += 3)
+            {
+                int rowWidth = baseWidth * (height - y) / height;
+                spriteBatch.Draw(
+                    new Rectangle((int)Position.X - rowWidth / 2, (int)Position.Y - y, rowWidth, 3),
+                    volcanoColor
+                );
+            }
+            
+            // Кратер с лавой
+            spriteBatch.Draw(new Rectangle((int)Position.X - 15, (int)Position.Y - height - 5, 30, 10), lavaColor);
+            
+            // Свечение от лавы
+            spriteBatch.Draw(new Rectangle((int)Position.X - 20, (int)Position.Y - height - 8, 40, 3), glowColor);
+            
+            // Частицы лавы
+            foreach (var lava in _lavaParticles)
+                lava.Draw(spriteBatch);
+        }
+    }
+    
+    public class LavaParticle
+    {
+        public Vector2 Position;
+        public Vector2 Velocity;
+        public float Life = 1.5f;
+        public float MaxLife;
+        
+        public LavaParticle(Vector2 position, Vector2 velocity)
+        {
+            Position = position;
+            Velocity = velocity;
+            MaxLife = Life;
+        }
+        
+        public void Update(float delta)
+        {
+            Position += Velocity * delta;
+            Velocity = new Vector2(Velocity.X, Velocity.Y + 400f * delta); // Гравитация
+            Life -= delta;
+        }
+        
+        public void Draw(SpriteBatch spriteBatch)
+        {
+            float alpha = Life / MaxLife;
+            Color lavaColor = new Color(255, (int)(100 * alpha), 0, (int)(255 * alpha));
+            int size = (int)(6 + (1 - alpha) * 4);
+            
+            spriteBatch.Draw(
+                new Rectangle((int)Position.X - size/2, (int)Position.Y - size/2, size, size),
+                lavaColor
+            );
+        }
+    }
+    
+    // === ПРЕДМЕТЫ ДЛЯ СБОРА ===
+    public enum CollectibleType { Coconut, Banana }
+    
+    public class Collectible
+    {
+        public Vector2 Position;
+        public CollectibleType Type;
+        public bool IsCollected { get; set; } = false;
+        private float _bobTimer;
+        
+        public Collectible(Vector2 position, CollectibleType type)
+        {
+            Position = position;
+            Type = type;
+        }
+        
+        public void Draw(SpriteBatch spriteBatch)
+        {
+            if (IsCollected) return;
+            
+            _bobTimer += 0.05f;
+            float bobOffset = (float)Math.Sin(_bobTimer) * 3f;
+            
+            if (Type == CollectibleType.Coconut)
+            {
+                // Кокос - коричневый круг
+                Color coconutColor = new Color(139, 90, 43);
+                int x = (int)Position.X;
+                int y = (int)(Position.Y + bobOffset);
+                
+                // Рисуем круг
+                for (int dy = -10; dy <= 10; dy += 3)
+                {
+                    int rowWidth = (int)(2 * Math.Sqrt(100 - dy * dy));
+                    spriteBatch.Draw(
+                        new Rectangle(x - rowWidth / 2, y + dy, rowWidth, 3),
+                        coconutColor
+                    );
+                }
+                
+                // Блик
+                spriteBatch.Draw(new Rectangle(x - 3, y - 5, 4, 4), new Color(180, 140, 100));
+            }
+            else
+            {
+                // Банан - жёлтый полумесяц
+                Color bananaColor = new Color(255, 220, 0);
+                int x = (int)Position.X;
+                int y = (int)(Position.Y + bobOffset);
+                
+                // Рисуем банан (изогнутая форма)
+                for (int i = 0; i < 8; i++)
+                {
+                    int curveY = (int)(i * i * 0.5f);
+                    spriteBatch.Draw(new Rectangle(x - 12 + i * 3, y + curveY, 4, 4), bananaColor);
+                }
+                
+                // Хвостик
+                spriteBatch.Draw(new Rectangle(x - 14, y, 4, 2), new Color(139, 90, 43));
+            }
+        }
+    }
+    
+    // === ДИКОБРАЗ ===
+    public class Porcupine
+    {
+        public Vector2 Position;
+        public Vector2 Velocity;
+        public bool IsDead { get; set; } = false;
+        private float _moveSpeed = 60f;
+        private float _direction = 1;
+        private float _animationTimer;
+        private List<Platform> _platforms;
+        
+        public Porcupine(Vector2 position)
+        {
+            Position = position;
+            Velocity = Vector2.Zero;
+        }
+        
+        public void Update(float delta, List<Platform> platforms)
+        {
+            _platforms = platforms;
+            _animationTimer += delta;
+            
+            // Движение влево-вправо
+            Velocity = new Vector2(_direction * _moveSpeed, Velocity.Y);
+            Position = new Vector2(Position.X + Velocity.X * delta, Position.Y);
+            
+            // Гравитация
+            Velocity = new Vector2(Velocity.X, Velocity.Y + 800f * delta);
+            Position = new Vector2(Position.X, Position.Y + Velocity.Y * delta);
+            
+            // Коллизии с платформами
+            CheckCollisions();
+            
+            // Смена направления на краях платформ или при столкновении
+            bool shouldTurn = false;
+            Rectangle ahead = new Rectangle(
+                (int)Position.X + (int)(_direction * 20),
+                (int)Position.Y + 15,
+                5, 5
+            );
+            
+            bool groundAhead = false;
+            foreach (var platform in _platforms)
+            {
+                if (ahead.Intersects(platform.Bounds) && platform.IsGround)
+                    groundAhead = true;
+            }
+            
+            if (!groundAhead || Position.X <= 0 || Position.X >= 3000)
+                shouldTurn = true;
+            
+            if (shouldTurn)
+                _direction = -_direction;
+        }
+        
+        private void CheckCollisions()
+        {
+            foreach (var platform in _platforms)
+            {
+                if (platform.IsGround)
+                {
+                    Rectangle porcupineBounds = new Rectangle(
+                        (int)Position.X - 15,
+                        (int)Position.Y - 15,
+                        30, 30
+                    );
+                    
+                    if (porcupineBounds.Intersects(platform.Bounds) && Velocity.Y >= 0)
+                    {
+                        Position = new Vector2(Position.X, platform.Bounds.Top - 15);
+                        Velocity = new Vector2(Velocity.X, 0);
+                    }
+                }
+            }
+        }
+        
+        public void Draw(SpriteBatch spriteBatch)
+        {
+            if (IsDead) return;
+            
+            Color bodyColor = new Color(139, 110, 80);
+            Color spikeColor = new Color(200, 180, 150);
+            Color eyeColor = Color.Black;
+            
+            int x = (int)Position.X;
+            int y = (int)Position.Y;
+            
+            // Тело (овальное)
+            spriteBatch.Draw(new Rectangle(x - 15, y - 10, 30, 20), bodyColor);
+            
+            // Колючки (треугольники по спине)
+            float spikeAnim = (float)Math.Sin(_animationTimer * 10f) * 2f;
+            for (int i = 0; i < 6; i++)
+            {
+                int spikeX = x - 12 + i * 5;
+                int spikeY = y - 12 - (int)spikeAnim;
+                spriteBatch.Draw(new Rectangle(spikeX, spikeY, 3, 6), spikeColor);
+            }
+            
+            // Голова
+            int headX = _direction > 0 ? x + 12 : x - 18;
+            spriteBatch.Draw(new Rectangle(headX, y - 8, 12, 14), bodyColor);
+            
+            // Глаз
+            int eyeX = _direction > 0 ? headX + 6 : headX + 2;
+            spriteBatch.Draw(new Rectangle(eyeX, y - 5, 3, 3), eyeColor);
+            
+            // Нос
+            int noseX = _direction > 0 ? headX + 10 : headX;
+            spriteBatch.Draw(new Rectangle(noseX, y - 2, 4, 3), new Color(100, 80, 60));
+            
+            // Ноги (анимация ходьбы)
+            float legOffset = (float)Math.Sin(_animationTimer * 15f) * 5f;
+            spriteBatch.Draw(new Rectangle(x - 8, y + 8, 5, 7 + (int)legOffset), bodyColor);
+            spriteBatch.Draw(new Rectangle(x + 3, y + 8, 5, 7 - (int)legOffset), bodyColor);
         }
     }
 }
