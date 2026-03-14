@@ -69,13 +69,17 @@ namespace PurpleLord.Entities
             float deltaTime = (float)gameTime.ElapsedGameTime.TotalSeconds;
             KeyboardState keyboardState = Keyboard.GetState();
 
+            // === ИНИЦИАЛИЗАЦИЯ ПРЕДЫДУЩЕГО СОСТОЯНИЯ (чтобы не было авто-прыжка) ===
+            if (_previousKeyboardState == null)
+                _previousKeyboardState = keyboardState;
+
             // === ОБРАБОТКА ПОЛУЧЕНИЯ УРОНА ===
             if (_isHurt)
             {
                 _hurtTimer -= deltaTime;
                 Position += _hurtVelocity * deltaTime;
                 Velocity = new Vector2(Velocity.X, Velocity.Y + _gravity * deltaTime);
-                
+
                 if (_hurtTimer <= 0)
                 {
                     _isHurt = false;
@@ -112,8 +116,9 @@ namespace PurpleLord.Entities
             // === ПРЫЖОК (только по нажатию, не авто) ===
             bool jumpPressed = keyboardState.IsKeyDown(Keys.Space) || keyboardState.IsKeyDown(Keys.W);
             bool jumpJustPressed = jumpPressed &&
-                !_previousKeyboardState.IsKeyDown(Keys.Space) &&
-                !_previousKeyboardState.IsKeyDown(Keys.W);
+                (!_previousKeyboardState.HasValue || 
+                (!_previousKeyboardState.Value.IsKeyDown(Keys.Space) &&
+                !_previousKeyboardState.Value.IsKeyDown(Keys.W)));
 
             if (jumpJustPressed)
             {
@@ -181,8 +186,8 @@ namespace PurpleLord.Entities
 
             _previousKeyboardState = keyboardState;
         }
-        
-        private KeyboardState _previousKeyboardState;
+
+        private KeyboardState? _previousKeyboardState;
 
         /// <summary>
         /// Получить урон от столкновения с врагом

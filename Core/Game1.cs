@@ -16,7 +16,7 @@ namespace PurpleLord
         private Player _player;
         private Camera2D _camera;
         private List<Platform> _platforms;
-        
+
         // Декорации
         private List<Cloud> _clouds;
         private List<Bird> _birds;
@@ -24,20 +24,25 @@ namespace PurpleLord
         private List<House> _houses;
         private List<SmokeParticle> _smokeParticles;
         private List<Flower> _flowers;
-        
+
         // Новые элементы
         private List<Wave> _waves;
         private List<Volcano> _volcanoes;
         private List<Collectible> _collectibles;
         private List<Porcupine> _porcupines;
-        
+        private List<Dolphin> _dolphins;
+        private Ship _ship;
+        private List<XPFloatText> _xpTexts;
+        private List<BloodParticle> _bloodParticles;
+
         // Солнце
         private Vector2 _sunPosition = new Vector2(100, 80);
-        
+        private float _sunRayTimer;
+
         // Размеры мира
         private const int WORLD_WIDTH = 3000;
         private const int GROUND_Y = 580;
-        
+
         // Цвета
         private Color _skyColor = new Color(135, 206, 235);
         private Color _seaColor = new Color(30, 144, 255);
@@ -45,15 +50,22 @@ namespace PurpleLord
         private Color _grassColor = new Color(34, 139, 34);
         private Color _dirtColor = new Color(139, 90, 43);
         private Color _sunColor = new Color(255, 220, 0);
+        
+        // Стартовое меню
+        private bool _showStartMenu = true;
+        private float _menuBlinkTimer;
+        private bool _menuTextVisible = true;
 
         public Game1()
         {
             _graphics = new GraphicsDeviceManager(this);
             Content.RootDirectory = "Content";
-            IsMouseVisible = false;
+            IsMouseVisible = true;
 
-            _graphics.PreferredBackBufferWidth = 1280;
-            _graphics.PreferredBackBufferHeight = 720;
+            // Полноэкранный режим
+            _graphics.IsFullScreen = true;
+            _graphics.PreferredBackBufferWidth = GraphicsAdapter.DefaultAdapter.CurrentDisplayMode.Width;
+            _graphics.PreferredBackBufferHeight = GraphicsAdapter.DefaultAdapter.CurrentDisplayMode.Height;
             _graphics.ApplyChanges();
 
             Window.Title = "Purple Lord - Path of Choices";
@@ -192,6 +204,22 @@ namespace PurpleLord
                     CollectibleType.Banana
                 ));
             }
+            
+            // === ДЕЛЬФИНЫ (прыгают в море) ===
+            _dolphins = new List<Dolphin>();
+            for (int i = 0; i < 5; i++)
+            {
+                _dolphins.Add(new Dolphin(2650 + i * 80, GROUND_Y - 30));
+            }
+            
+            // === КОРАБЛЬ (вдалеке на море) ===
+            _ship = new Ship(new Vector2(2800, GROUND_Y - 60));
+            
+            // === ТЕКСТЫ +XP ===
+            _xpTexts = new List<XPFloatText>();
+            
+            // === ЧАСТИЦЫ КРОВИ ===
+            _bloodParticles = new List<BloodParticle>();
 
             base.Initialize();
         }
@@ -199,14 +227,43 @@ namespace PurpleLord
         protected override void LoadContent()
         {
             _spriteBatch = new SpriteBatch(GraphicsDevice);
+            
+            // Звуки не загружаем (нужны внешние файлы)
+            // Звуковые эффекты будут визуальными
         }
 
         protected override void Update(GameTime gameTime)
         {
             float delta = (float)gameTime.ElapsedGameTime.TotalSeconds;
+            KeyboardState keyboardState = Keyboard.GetState();
+
+            // === СТАРТОВОЕ МЕНЮ ===
+            if (_showStartMenu)
+            {
+                _menuBlinkTimer += delta;
+                if (_menuBlinkTimer > 0.5f)
+                {
+                    _menuBlinkTimer = 0f;
+                    _menuTextVisible = !_menuTextVisible;
+                }
+                
+                // Нажатие любой клавиши для старта
+                if (keyboardState.IsKeyDown(Keys.Enter) || keyboardState.IsKeyDown(Keys.Space) || 
+                    keyboardState.IsKeyDown(Keys.W) || keyboardState.IsKeyDown(Keys.D) ||
+                    keyboardState.IsKeyDown(Keys.A) || keyboardState.IsKeyDown(Keys.S))
+                {
+                    _showStartMenu = false;
+                }
+                
+                if (keyboardState.IsKeyDown(Keys.Escape))
+                    Exit();
+                    
+                base.Update(gameTime);
+                return;
+            }
 
             // Выход по Escape
-            if (Keyboard.GetState().IsKeyDown(Keys.Escape))
+            if (keyboardState.IsKeyDown(Keys.Escape))
                 Exit();
 
             // Обновление игрока
@@ -224,21 +281,41 @@ namespace PurpleLord
             foreach (var bird in _birds)
                 bird.Update(delta);
             
+            // Обновление дельфинов
+            foreach (var dolphin in _dolphins)
+                dolphin.Update(delta);
+            
+            // Обновление корабля
+            _ship.Update(delta);
+
             // Обновление волн
             foreach (var wave in _waves)
                 wave.Update(delta);
-            
+
             // Обновление вулканов
             foreach (var volcano in _volcanoes)
                 volcano.Update(delta);
             
+            // Обновление солнца
+            UpdateSun(delta);
+
             // Обновление дикобразов
             foreach (var porcupine in _porcupines)
                 porcupine.Update(delta, _platforms);
             
+            // Обновление XP текстов
+            foreach (var xpText in _xpTexts)
+                xpText.Update(delta);
+            _xpTexts.RemoveAll(x => x.Life <= 0);
+            
+            // Обновление частиц крови
+            foreach (var blood in _bloodParticles)
+                blood.Update(delta);
+            _bloodParticles.RemoveAll(b => b.Life <= 0);
+
             // Проверка сбора предметов
             CheckCollectibles();
-            
+
             // Проверка столкновений с дикобразами
             CheckPorcupineCollisions();
 
@@ -246,6 +323,11 @@ namespace PurpleLord
             UpdateSmoke(delta);
 
             base.Update(gameTime);
+        }
+        
+        private void UpdateSun(float delta)
+        {
+            _sunRayTimer += delta;
         }
         
         private void CheckCollectibles()
@@ -262,11 +344,18 @@ namespace PurpleLord
                         collectible.IsCollected = true;
                         int xpGain = collectible.Type == CollectibleType.Coconut ? 25 : 15;
                         _player.CollectItem(xpGain);
+                        
+                        // Визуальный эффект +XP
+                        _xpTexts.Add(new XPFloatText(
+                            _player.Position,
+                            $"+{xpGain} XP",
+                            collectible.Type == CollectibleType.Coconut ? new Color(210, 140, 80) : Color.Yellow
+                        ));
                     }
                 }
             }
         }
-        
+
         private void CheckPorcupineCollisions()
         {
             foreach (var porcupine in _porcupines)
@@ -274,7 +363,20 @@ namespace PurpleLord
                 float distance = Vector2.Distance(_player.Position, porcupine.Position);
                 if (distance < 50f && !porcupine.IsDead)
                 {
-                    _player.TakeDamage(porcupine.Position, 20);
+                    int damage = 20;
+                    _player.TakeDamage(porcupine.Position, damage);
+
+                    // Эффект крови
+                    for (int i = 0; i < 15; i++)
+                    {
+                        _bloodParticles.Add(new BloodParticle(
+                            _player.Position,
+                            new Vector2(
+                                (float)(_random.NextDouble() - 0.5) * 300f,
+                                (float)(_random.NextDouble() - 0.5) * 300f - 100f
+                            )
+                        ));
+                    }
                 }
             }
         }
@@ -316,6 +418,13 @@ namespace PurpleLord
             // Море на горизонте (справа)
             _spriteBatch.Draw(new Rectangle(2600, GROUND_Y - 40, 600, 60), _seaColor);
             
+            // === КОРАБЛЬ ===
+            _ship.Draw(_spriteBatch);
+            
+            // === ДЕЛЬФИНЫ ===
+            foreach (var dolphin in _dolphins)
+                dolphin.Draw(_spriteBatch);
+
             // === ВОЛНЫ ===
             foreach (var wave in _waves)
                 wave.Draw(_spriteBatch);
@@ -323,7 +432,7 @@ namespace PurpleLord
             // Горы (на заднем плане)
             DrawMountains(2400, GROUND_Y - 40);
             DrawMountains(2700, GROUND_Y - 40);
-            
+
             // === ВУЛКАНЫ ===
             foreach (var volcano in _volcanoes)
                 volcano.Draw(_spriteBatch);
@@ -351,7 +460,7 @@ namespace PurpleLord
             // === ПАЛЬМЫ ===
             foreach (var palm in _palmTrees)
                 palm.Draw(_spriteBatch);
-            
+
             // === ПРЕДМЕТЫ ДЛЯ СБОРА ===
             foreach (var collectible in _collectibles)
                 collectible.Draw(_spriteBatch);
@@ -359,18 +468,30 @@ namespace PurpleLord
             // === ПЛАТФОРМЫ ===
             foreach (var platform in _platforms)
                 platform.Draw(_spriteBatch);
-            
+
             // === ДИКОБРАЗЫ ===
             foreach (var porcupine in _porcupines)
                 porcupine.Draw(_spriteBatch);
+            
+            // === ЧАСТИЦЫ КРОВИ ===
+            foreach (var blood in _bloodParticles)
+                blood.Draw(_spriteBatch);
 
             // === ИГРОК ===
             _player.Draw(_spriteBatch, gameTime);
+            
+            // === XP ТЕКСТЫ ===
+            foreach (var xpText in _xpTexts)
+                xpText.Draw(_spriteBatch);
 
             _spriteBatch.End();
 
             // === UI (без камеры) ===
             DrawUI();
+            
+            // === СТАРТОВОЕ МЕНЮ (поверх всего) ===
+            if (_showStartMenu)
+                DrawStartMenu();
 
             base.Draw(gameTime);
         }
@@ -378,32 +499,133 @@ namespace PurpleLord
         private void DrawSun(Vector2 position)
         {
             int radius = 40;
+
+            // === ЭФФЕКТНЫЕ ЛУЧИ (вращаются) ===
+            float rayRotation = _sunRayTimer * 0.5f;
+            int numRays = 16;
             
-            // Лучи солнца
-            for (int i = 0; i < 12; i++)
+            for (int i = 0; i < numRays; i++)
             {
-                float angle = i * MathHelper.Pi / 6;
-                float rayX = position.X + (float)Math.Cos(angle) * (radius + 15);
-                float rayY = position.Y + (float)Math.Sin(angle) * (radius + 15);
-                _spriteBatch.Draw(
-                    new Rectangle((int)rayX - 2, (int)rayY - 2, 4, 4),
-                    new Color(255, 255, 200)
-                );
+                float angle = rayRotation + i * MathHelper.TwoPi / numRays;
+                float rayLength = radius + 20 + (float)Math.Sin(_sunRayTimer * 3 + i) * 10;
+                
+                float rayX = position.X + (float)Math.Cos(angle) * rayLength;
+                float rayY = position.Y + (float)Math.Sin(angle) * rayLength;
+                
+                // Рисуем луч от центра к краю
+                Vector2 direction = new Vector2((float)Math.Cos(angle), (float)Math.Sin(angle));
+                for (float d = radius; d < rayLength; d += 5)
+                {
+                    float alpha = 1 - (d - radius) / (rayLength - radius);
+                    int size = (int)(8 * alpha);
+                    _spriteBatch.Draw(
+                        new Rectangle(
+                            (int)(position.X + direction.X * d) - size/2,
+                            (int)(position.Y + direction.Y * d) - size/2,
+                            size, size
+                        ),
+                        new Color(255, 255, 200, (int)(alpha * 200))
+                    );
+                }
             }
-            
-            // Центр солнца (закрашенный круг)
+
+            // Центр солнца (закрашенный круг с градиентом)
             for (int y = -radius; y <= radius; y += 3)
             {
                 for (int x = -radius; x <= radius; x += 3)
                 {
                     if (x * x + y * y <= radius * radius)
                     {
+                        float dist = (float)Math.Sqrt(x * x + y * y) / radius;
+                        Color sunGradient = new Color(
+                            255,
+                            (int)(220 * (1 - dist * 0.3f)),
+                            (int)(50 * dist)
+                        );
                         _spriteBatch.Draw(
                             new Rectangle((int)position.X + x, (int)position.Y + y, 3, 3),
-                            _sunColor
+                            sunGradient
                         );
                     }
                 }
+            }
+            
+            // Свечение вокруг солнца
+            for (int r = radius + 5; r < radius + 20; r += 5)
+            {
+                for (int a = 0; a < 360; a += 15)
+                {
+                    float angle = a * MathHelper.Pi / 180;
+                    float glowX = position.X + (float)Math.Cos(angle) * r;
+                    float glowY = position.Y + (float)Math.Sin(angle) * r;
+                    _spriteBatch.Draw(
+                        new Rectangle((int)glowX - 2, (int)glowY - 2, 4, 4),
+                        new Color(255, 200, 100, 100)
+                    );
+                }
+            }
+        }
+        
+        private void DrawStartMenu()
+        {
+            _spriteBatch.Begin();
+            
+            int screenWidth = GraphicsDevice.Viewport.Width;
+            int screenHeight = GraphicsDevice.Viewport.Height;
+            int centerX = screenWidth / 2;
+            int centerY = screenHeight / 2;
+            
+            // Затемнённый фон
+            _spriteBatch.Draw(
+                new Rectangle(0, 0, screenWidth, screenHeight),
+                new Color(0, 0, 0, 180)
+            );
+            
+            // Заголовок игры
+            DrawCenteredText("PURPLE LORD", new Vector2(centerX, centerY - 100), Color.Purple, 2.5f);
+            DrawCenteredText("Path of Choices", new Vector2(centerX, centerY - 50), Color.White, 1.2f);
+            
+            // Мигающий текст старта
+            if (_menuTextVisible)
+            {
+                DrawCenteredText("НАЖМИТЕ ЛЮБУЮ КЛАВИШУ ДЛЯ СТАРТА", new Vector2(centerX, centerY + 50), Color.Yellow, 1f);
+            }
+            
+            // Управление
+            DrawCenteredText("Управление:", new Vector2(centerX, centerY + 120), Color.White, 0.9f);
+            DrawCenteredText("A/D или ←/→ - Движение | Пробел/W - Прыжок | Escape - Выход", new Vector2(centerX, centerY + 155), Color.LightGray, 0.7f);
+            
+            // Описание игры
+            DrawCenteredText("Собирайте кокосы и бананы для получения XP", new Vector2(centerX, centerY + 210), Color.Lime, 0.7f);
+            DrawCenteredText("Избегайте колючих дикобразов!", new Vector2(centerX, centerY + 235), Color.Red, 0.7f);
+            
+            _spriteBatch.End();
+        }
+        
+        private void DrawCenteredText(string text, Vector2 center, Color color, float scale)
+        {
+            int charWidth = 10;
+            int charHeight = 14;
+            int textWidth = (int)(text.Length * charWidth * scale);
+            int textHeight = (int)(charHeight * scale);
+            
+            int startX = (int)center.X - textWidth / 2;
+            int startY = (int)center.Y - textHeight / 2;
+            
+            int x = startX;
+            int y = startY;
+            
+            foreach (char c in text)
+            {
+                if (c == ' ')
+                {
+                    x += (int)(charWidth * scale);
+                    continue;
+                }
+                
+                // Рисуем символ
+                _spriteBatch.Draw(new Rectangle(x, y, (int)(6 * scale), (int)(8 * scale)), color);
+                x += (int)(charWidth * scale);
             }
         }
 
@@ -1080,6 +1302,223 @@ namespace PurpleLord
             float legOffset = (float)Math.Sin(_animationTimer * 15f) * 5f;
             spriteBatch.Draw(new Rectangle(x - 8, y + 8, 5, 7 + (int)legOffset), bodyColor);
             spriteBatch.Draw(new Rectangle(x + 3, y + 8, 5, 7 - (int)legOffset), bodyColor);
+        }
+    }
+    
+    // === ДЕЛЬФИН (прыгает в море) ===
+    public class Dolphin
+    {
+        public Vector2 Position;
+        public Vector2 Velocity;
+        private float _jumpCooldown;
+        private bool _isJumping;
+        private Random _random;
+        
+        public Dolphin(float x, float y)
+        {
+            Position = new Vector2(x, y);
+            Velocity = Vector2.Zero;
+            _random = new Random();
+            _jumpCooldown = _random.NextSingle() * 3f;
+        }
+        
+        public void Update(float delta)
+        {
+            if (_isJumping)
+            {
+                Position += Velocity * delta;
+                Velocity = new Vector2(Velocity.X, Velocity.Y + 800f * delta); // Гравитация
+                
+                // Если упал в воду
+                if (Position.Y > 580)
+                {
+                    Position = new Vector2(Position.X, 580);
+                    _isJumping = false;
+                    _jumpCooldown = 2f + _random.NextSingle() * 3f;
+                }
+            }
+            else
+            {
+                _jumpCooldown -= delta;
+                if (_jumpCooldown <= 0)
+                {
+                    // Прыжок!
+                    _isJumping = true;
+                    Velocity = new Vector2(150f, -400f + _random.NextSingle() * 100f);
+                }
+            }
+        }
+        
+        public void Draw(SpriteBatch spriteBatch)
+        {
+            Color dolphinColor = new Color(100, 150, 200);
+            Color bellyColor = new Color(200, 200, 220);
+            
+            int x = (int)Position.X;
+            int y = (int)Position.Y;
+            
+            // Тело (овальное, изогнутое при прыжке)
+            if (_isJumping)
+            {
+                // Изогнутая форма в прыжке
+                spriteBatch.Draw(new Rectangle(x - 20, y - 5, 40, 12), dolphinColor);
+                // Хвост
+                spriteBatch.Draw(new Rectangle(x - 25, y, 10, 8), dolphinColor);
+                // Плавник
+                spriteBatch.Draw(new Rectangle(x, y - 12, 8, 6), dolphinColor);
+            }
+            else
+            {
+                // Плывёт в воде (видна только часть)
+                spriteBatch.Draw(new Rectangle(x - 15, y - 8, 30, 10), dolphinColor);
+                // Плавник над водой
+                spriteBatch.Draw(new Rectangle(x - 5, y - 15, 6, 8), dolphinColor);
+            }
+            
+            // Глаз
+            spriteBatch.Draw(new Rectangle(x + 10, y - 3, 3, 3), Color.Black);
+        }
+    }
+    
+    // === КОРАБЛЬ С ПАРУСАМИ ===
+    public class Ship
+    {
+        public Vector2 Position;
+        private float _bobTimer;
+        
+        public Ship(Vector2 position)
+        {
+            Position = position;
+        }
+        
+        public void Update(float delta)
+        {
+            _bobTimer += delta;
+        }
+        
+        public void Draw(SpriteBatch spriteBatch)
+        {
+            float bobOffset = (float)Math.Sin(_bobTimer * 1.5f) * 3f;
+            int x = (int)Position.X;
+            int y = (int)(Position.Y + bobOffset);
+            
+            Color hullColor = new Color(101, 67, 33);
+            Color sailColor = new Color(245, 245, 220);
+            Color mastColor = new Color(139, 90, 43);
+            
+            // Корпус корабля
+            spriteBatch.Draw(new Rectangle(x - 40, y, 80, 20), hullColor);
+            spriteBatch.Draw(new Rectangle(x - 35, y - 5, 70, 5), hullColor);
+            
+            // Мачта
+            spriteBatch.Draw(new Rectangle(x - 3, y - 50, 6, 50), mastColor);
+            
+            // Паруса (два)
+            spriteBatch.Draw(new Rectangle(x + 3, y - 45, 35, 25), sailColor);
+            spriteBatch.Draw(new Rectangle(x + 3, y - 25, 30, 20), sailColor);
+            
+            // Флаг на вершине
+            spriteBatch.Draw(new Rectangle(x + 3, y - 55, 15, 8), Color.Red);
+            
+            // Окна на корпусе
+            spriteBatch.Draw(new Rectangle(x - 25, y + 5, 6, 6), new Color(60, 40, 20));
+            spriteBatch.Draw(new Rectangle(x - 10, y + 5, 6, 6), new Color(60, 40, 20));
+            spriteBatch.Draw(new Rectangle(x + 5, y + 5, 6, 6), new Color(60, 40, 20));
+            spriteBatch.Draw(new Rectangle(x + 20, y + 5, 6, 6), new Color(60, 40, 20));
+        }
+    }
+    
+    // === ВСПЛЫВАЮЩИЙ ТЕКСТ +XP ===
+    public class XPFloatText
+    {
+        public Vector2 Position;
+        public string Text;
+        public Color Color;
+        public float Life = 1.5f;
+        public float MaxLife;
+        public float Scale;
+        
+        public XPFloatText(Vector2 position, string text, Color color)
+        {
+            Position = position;
+            Text = text;
+            Color = color;
+            MaxLife = Life;
+            Scale = 0.8f + new Random().NextSingle() * 0.3f;
+        }
+        
+        public void Update(float delta)
+        {
+            Position = new Vector2(Position.X, Position.Y - 30f * delta);
+            Life -= delta;
+        }
+        
+        public void Draw(SpriteBatch spriteBatch)
+        {
+            float alpha = Life / MaxLife;
+            Color drawColor = new Color(Color.R, Color.G, Color.B, (int)(255 * alpha));
+            
+            int x = (int)Position.X;
+            int y = (int)Position.Y;
+            int charWidth = (int)(8 * Scale);
+            int charHeight = (int)(10 * Scale);
+            
+            int startX = x - (Text.Length * charWidth) / 2;
+            
+            foreach (char c in Text)
+            {
+                if (c == ' ')
+                {
+                    startX += charWidth;
+                    continue;
+                }
+                
+                // Рисуем символ с тенью
+                spriteBatch.Draw(new Rectangle(startX + 1, y + 1, charWidth - 2, charHeight - 2), Color.Black);
+                spriteBatch.Draw(new Rectangle(startX, y, charWidth - 2, charHeight - 2), drawColor);
+                startX += charWidth;
+            }
+        }
+    }
+    
+    // === ЧАСТИЦЫ КРОВИ ===
+    public class BloodParticle
+    {
+        public Vector2 Position;
+        public Vector2 Velocity;
+        public float Life = 1f;
+        public float MaxLife;
+        public float Size;
+        
+        public BloodParticle(Vector2 position, Vector2 velocity)
+        {
+            Position = position;
+            Velocity = velocity;
+            MaxLife = Life;
+            Size = 3f + new Random().NextSingle() * 4f;
+        }
+        
+        public void Update(float delta)
+        {
+            Position += Velocity * delta;
+            Velocity = new Vector2(Velocity.X, Velocity.Y + 500f * delta); // Гравитация
+            Velocity = new Vector2(Velocity.X * 0.98f, Velocity.Y); // Сопротивление воздуха
+            Life -= delta;
+        }
+        
+        public void Draw(SpriteBatch spriteBatch)
+        {
+            float alpha = Life / MaxLife;
+            Color bloodColor = new Color(180, 0, 0, (int)(200 * alpha));
+            int size = (int)(Size * alpha);
+            
+            if (size > 0)
+            {
+                spriteBatch.Draw(
+                    new Rectangle((int)Position.X - size/2, (int)Position.Y - size/2, size, size),
+                    bloodColor
+                );
+            }
         }
     }
 }
