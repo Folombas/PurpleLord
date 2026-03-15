@@ -7,51 +7,11 @@
 using System;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
+using PurpleLord.Core;
+using PurpleLord.Entities.Enemies;
 
-namespace PurpleLordPlatformer.Entities.Enemies
+namespace PurpleLord.Entities.Enemies
 {
-    /// <summary>
-    /// Базовый класс для врагов / Base enemy class
-    /// </summary>
-    public abstract class Enemy
-    {
-        public Vector2 Position { get; set; }
-        public float Width { get; set; }
-        public float Height { get; set; }
-        public bool IsActive { get; set; } = true;
-        public string Tag { get; set; } = "";
-        
-        public Rectangle Bounds => new Rectangle(
-            (int)(Position.X - Width / 2),
-            (int)(Position.Y - Height / 2),
-            (int)Width,
-            (int)Height);
-        
-        public virtual void Update(GameTime gameTime) { }
-        public virtual void Draw(SpriteBatch spriteBatch, GameTime gameTime) { }
-        
-        public event Action<Enemy> OnDeath;
-        
-        public bool IsDead { get; protected set; } = false;
-        
-        public void Kill()
-        {
-            IsDead = true;
-            OnDeath?.Invoke(this);
-        }
-    }
-
-    /// <summary>
-    /// Типы поведения врагов / Enemy behavior types
-    /// </summary>
-    public enum EnemyBehavior
-    {
-        Stationary,
-        Patrol,
-        Chase,
-        Flying
-    }
-
     /// <summary>
     /// Ядовитый гриб мухомор. Стационарный враг, который:
     /// - Покачивается из стороны в сторону
@@ -70,16 +30,15 @@ namespace PurpleLordPlatformer.Entities.Enemies
         private float _gasEmitTimer = 0f;
         private float _gasEmitInterval = 0.3f;
         private int _gasParticlesPerEmit = 3;
-        
+
         // Частицы газа / Gas particles
         private PoisonGasParticle[] _gasParticles;
         private const int MaxParticles = 50;
 
         // Урон и отравление / Damage and poison
-        private int _contactDamage = 1;
         private int _poisonDamage = 1;
         private float _poisonDuration = 3f;
-        
+
         // Визуальные параметры / Visual parameters
         private float _pulseTimer = 0f;
         private float _pulseSpeed = 3f;
@@ -87,14 +46,15 @@ namespace PurpleLordPlatformer.Entities.Enemies
         private Color _stemColor = new Color(240, 220, 200); // Светлая ножка
         private Color _gasColor = new Color(100, 255, 100, 150); // Зеленоватый газ
 
-        public MushroomEnemy(Vector2 position, EnemyBehavior behavior = EnemyBehavior.Stationary)
-            : base(position, EnemyType.Neuron, behavior)
+        public MushroomEnemy(Vector2 position)
+            : base(position, EnemyType.Mushroom, EnemyBehavior.Stationary)
         {
             Width = 40;
             Height = 50;
-            _damage = _contactDamage;
+            _damage = 1;
+            _health = 2; // Гриб можно уничтожить / Mushroom can be destroyed
             Tag = "PoisonMushroom";
-            
+
             // Инициализация частиц / Initialize particles
             _gasParticles = new PoisonGasParticle[MaxParticles];
             for (int i = 0; i < MaxParticles; i++)
@@ -198,19 +158,21 @@ namespace PurpleLordPlatformer.Entities.Enemies
                 bounds.Offset((int)_swayOffset, 0);
                 GraphicsUtils.DrawRectangle(spriteBatch, bounds, Color.Lime, 2);
             }
+
+            base.Draw(spriteBatch, gameTime);
         }
 
         private void DrawStem(SpriteBatch spriteBatch)
         {
             float stemWidth = 14f;
             float stemHeight = Height / 2;
-            
+
             Rectangle stemRect = new Rectangle(
                 (int)(Position.X + _swayOffset - stemWidth / 2),
                 (int)(Position.Y),
                 (int)stemWidth,
                 (int)stemHeight);
-            
+
             spriteBatch.Draw(GraphicsUtils.WhiteTexture, stemRect, _stemColor);
 
             // Юбочка на ножке / Ring on stem
@@ -219,7 +181,7 @@ namespace PurpleLordPlatformer.Entities.Enemies
                 (int)(Position.Y + 8),
                 (int)(stemWidth * 2),
                 4);
-            
+
             spriteBatch.Draw(GraphicsUtils.WhiteTexture, skirtRect, new Color(255, 200, 200));
         }
 
@@ -229,7 +191,6 @@ namespace PurpleLordPlatformer.Entities.Enemies
             Vector2 capCenter = new Vector2(Position.X + _swayOffset, Position.Y - Height / 4);
 
             // Рисуем полукруглую шляпку по частям / Draw semicircular cap in parts
-            int segments = 8;
             for (int y = 0; y < capRadius; y++)
             {
                 float xRange = (float)Math.Sqrt(Math.Max(0, capRadius * capRadius - y * y));
@@ -287,35 +248,42 @@ namespace PurpleLordPlatformer.Entities.Enemies
             }
         }
 
-        public void ApplyPoisonEffect(object player)
+        /// <summary>
+        /// Применить эффект отравления к игроку.
+        /// Apply poison effect to player.
+        /// </summary>
+        public void ApplyPoisonEffect(Player player)
         {
-            // Метод применяется к игроку для наложения эффекта отравления
-            // Requires player object with ApplyPoison method
             if (player != null)
             {
-                // Вызов метода ApplyPoison через рефлексию или интерфейс
-                // player.ApplyPoison(_poisonDuration, _poisonDamage);
+                player.ApplyPoison(_poisonDuration, _poisonDamage);
             }
         }
 
-        protected virtual void UpdateStationary(GameTime gameTime)
+        public override void TakeDamage(int damage)
         {
-            // Мухоморы стационарны, но покачиваются / Mushrooms are stationary but sway
-            // Логика в Update() / Logic in Update()
+            base.TakeDamage(damage);
+            // При смерти создаём эффект / Create effect on death
+            if (_isDead)
+            {
+                // Можно добавить частицы смерти / Can add death particles
+            }
         }
 
-        public void TakeDamage(int damage)
-        {
-            // Мухоморы могут быть уничтожены / Mushrooms can be destroyed
-            Kill();
-        }
-
+        /// <summary>
+        /// Установить параметры отравления.
+        /// Set poison parameters.
+        /// </summary>
         public void SetPoisonParams(float duration, int damagePerTick)
         {
             _poisonDuration = duration;
             _poisonDamage = damagePerTick;
         }
 
+        /// <summary>
+        /// Установить параметры покачивания.
+        /// Set sway parameters.
+        /// </summary>
         public void SetSwayParams(float speed, float amount)
         {
             _swaySpeed = speed;
@@ -325,8 +293,8 @@ namespace PurpleLordPlatformer.Entities.Enemies
         public bool DebugMode { get; set; } = false;
 
         /// <summary>
-        /// Простая система частиц для ядовитого газа
-        /// Simple particle system for poison gas
+        /// Простая система частиц для ядовитого газа.
+        /// Simple particle system for poison gas.
         /// </summary>
         private class PoisonGasParticle
         {

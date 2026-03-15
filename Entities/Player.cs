@@ -40,6 +40,19 @@ namespace PurpleLord.Entities
         public int Level { get; set; } = 1;
         public int XPToNextLevel { get; set; } = 100;
 
+        // Система здоровья / Health system
+        private int _health = 3;
+        private int _maxHealth = 3;
+        private float _invincibilityTimer = 0f;
+        private const float InvincibilityDuration = 1.5f;
+
+        // Эффект отравления / Poison effect
+        private bool _isPoisoned = false;
+        private float _poisonTimer = 0f;
+        private float _poisonDamageInterval = 0.5f;
+        private int _poisonDamagePerTick = 1;
+        private float _poisonDamageAccumulator = 0f;
+
         // Состояние при получении урона
         private bool _isHurt = false;
         private float _hurtTimer = 0f;
@@ -73,6 +86,16 @@ namespace PurpleLord.Entities
             _platforms = platforms;
             float deltaTime = (float)gameTime.ElapsedGameTime.TotalSeconds;
             KeyboardState keyboardState = Keyboard.GetState();
+
+            // Обновление таймера неуязвимости / Update invincibility timer
+            if (_invincibilityTimer > 0)
+            {
+                _invincibilityTimer -= deltaTime;
+                if (_invincibilityTimer < 0) _invincibilityTimer = 0;
+            }
+
+            // Обновление эффекта отравления / Update poison effect
+            UpdatePoison(deltaTime);
 
             // === ОБРАБОТКА ПОЛУЧЕНИЯ УРОНА ===
             if (_isHurt)
@@ -404,5 +427,116 @@ namespace PurpleLord.Entities
                 spriteBatch.Draw(new Rectangle(x + 4, y + Radius - 8, 6, 8), bodyDark);
             }
         }
+
+        #region Health & Poison System | Система здоровья и отравления
+
+        /// <summary>
+        /// Нанести урон игроку.
+        /// Deal damage to player.
+        /// </summary>
+        public void TakeDamage(int damage)
+        {
+            if (_invincibilityTimer > 0 || _health <= 0) return;
+
+            _health -= damage;
+            _invincibilityTimer = InvincibilityDuration;
+            _isHurt = true;
+            _hurtTimer = _hurtDuration;
+            _hurtVelocity = new Vector2(_facingRight ? -200 : 200, -100);
+
+            OnDamageTaken?.Invoke(damage);
+
+            if (_health <= 0)
+            {
+                _health = 0;
+                OnDeath?.Invoke();
+            }
+        }
+
+        /// <summary>
+        /// Полечить игрока.
+        /// Heal player.
+        /// </summary>
+        public void Heal(int amount)
+        {
+            _health += amount;
+            if (_health > _maxHealth) _health = _maxHealth;
+            OnHeal?.Invoke(amount);
+        }
+
+        /// <summary>
+        /// Применить эффект отравления.
+        /// Apply poison effect.
+        /// </summary>
+        public void ApplyPoison(float duration, int damagePerTick)
+        {
+            _isPoisoned = true;
+            _poisonTimer = duration;
+            _poisonDamagePerTick = damagePerTick;
+            _poisonDamageAccumulator = 0f;
+            OnPoisonApplied?.Invoke(duration);
+        }
+
+        /// <summary>
+        /// Обновление эффекта отравления.
+        /// Update poison effect.
+        /// </summary>
+        private void UpdatePoison(float deltaTime)
+        {
+            if (!_isPoisoned) return;
+
+            _poisonTimer -= deltaTime;
+            _poisonDamageAccumulator += deltaTime;
+
+            // Наносим урон каждые poisonDamageInterval секунд
+            if (_poisonDamageAccumulator >= _poisonDamageInterval)
+            {
+                TakeDamage(_poisonDamagePerTick);
+                _poisonDamageAccumulator = 0f;
+                OnPoisonDamage?.Invoke(_poisonDamagePerTick);
+            }
+
+            // Окончание эффекта отравления
+            if (_poisonTimer <= 0)
+            {
+                _isPoisoned = false;
+                _poisonDamageAccumulator = 0f;
+                OnPoisonEnded?.Invoke();
+            }
+        }
+
+        /// <summary>
+        /// Снять эффект отравления.
+        /// Remove poison effect.
+        /// </summary>
+        public void CurePoison()
+        {
+            if (_isPoisoned)
+            {
+                _isPoisoned = false;
+                _poisonTimer = 0f;
+                _poisonDamageAccumulator = 0f;
+                OnPoisonEnded?.Invoke();
+            }
+        }
+
+        // Свойства здоровья / Health properties
+        public int Health => _health;
+        public int MaxHealth => _maxHealth;
+        public float HealthPercent => (float)_health / _maxHealth;
+        public bool IsAlive => _health > 0;
+        public bool IsInvincible => _invincibilityTimer > 0;
+        public bool IsPoisoned => _isPoisoned;
+        public float PoisonRemaining => _poisonTimer;
+
+        // События / Events
+        public Action<int> OnDamageTaken;
+        public Action<int> OnHeal;
+        public Action OnDeath;
+        public Action<float> OnPoisonApplied;
+        public Action<int> OnPoisonDamage;
+        public Action OnPoisonEnded;
+
+        #endregion
     }
 }
