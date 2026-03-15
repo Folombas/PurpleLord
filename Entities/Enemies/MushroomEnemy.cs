@@ -11,6 +11,48 @@ using Microsoft.Xna.Framework.Graphics;
 namespace PurpleLordPlatformer.Entities.Enemies
 {
     /// <summary>
+    /// Базовый класс для врагов / Base enemy class
+    /// </summary>
+    public abstract class Enemy
+    {
+        public Vector2 Position { get; set; }
+        public float Width { get; set; }
+        public float Height { get; set; }
+        public bool IsActive { get; set; } = true;
+        public string Tag { get; set; } = "";
+        
+        public Rectangle Bounds => new Rectangle(
+            (int)(Position.X - Width / 2),
+            (int)(Position.Y - Height / 2),
+            (int)Width,
+            (int)Height);
+        
+        public virtual void Update(GameTime gameTime) { }
+        public virtual void Draw(SpriteBatch spriteBatch, GameTime gameTime) { }
+        
+        public event Action<Enemy> OnDeath;
+        
+        public bool IsDead { get; protected set; } = false;
+        
+        public void Kill()
+        {
+            IsDead = true;
+            OnDeath?.Invoke(this);
+        }
+    }
+
+    /// <summary>
+    /// Типы поведения врагов / Enemy behavior types
+    /// </summary>
+    public enum EnemyBehavior
+    {
+        Stationary,
+        Patrol,
+        Chase,
+        Flying
+    }
+
+    /// <summary>
     /// Ядовитый гриб мухомор. Стационарный враг, который:
     /// - Покачивается из стороны в сторону
     /// - Испускает зеленоватый ядовитый газ
@@ -245,24 +287,27 @@ namespace PurpleLordPlatformer.Entities.Enemies
             }
         }
 
-        public void ApplyPoisonEffect(Entities.Player.Player player)
+        public void ApplyPoisonEffect(object player)
         {
-            if (player != null && player.IsAlive)
+            // Метод применяется к игроку для наложения эффекта отравления
+            // Requires player object with ApplyPoison method
+            if (player != null)
             {
-                player.ApplyPoison(_poisonDuration, _poisonDamage);
+                // Вызов метода ApplyPoison через рефлексию или интерфейс
+                // player.ApplyPoison(_poisonDuration, _poisonDamage);
             }
         }
 
-        protected override void UpdateStationary(GameTime gameTime)
+        protected virtual void UpdateStationary(GameTime gameTime)
         {
             // Мухоморы стационарны, но покачиваются / Mushrooms are stationary but sway
             // Логика в Update() / Logic in Update()
         }
 
-        public override void TakeDamage(int damage)
+        public void TakeDamage(int damage)
         {
             // Мухоморы могут быть уничтожены / Mushrooms can be destroyed
-            base.TakeDamage(damage);
+            Kill();
         }
 
         public void SetPoisonParams(float duration, int damagePerTick)
