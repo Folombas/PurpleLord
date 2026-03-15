@@ -4,6 +4,7 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
 using Microsoft.Xna.Framework.Audio;
+using PurpleLord.Entities.Enemies; // Для MushroomEnemy
 
 namespace PurpleLord
 {
@@ -31,6 +32,7 @@ namespace PurpleLord
         private List<Palm> _palms;
         private List<Item> _items;
         private List<Enemy> _enemies;
+        private List<MushroomEnemy> _mushrooms; // === ЯДОВИТЫЕ ГРИБЫ ===
         
         // UI
         private int _xp = 0;
@@ -51,9 +53,14 @@ namespace PurpleLord
         private List<Rock> _rocksInGround;
         private List<Diamond> _diamondsInGround;
         private List<DugHole> _dugHoles; // Выкопанные ямы
-        
+
         // Грунт для копания (сетка блоков земли)
         private List<DirtBlock> _dirtBlocks;
+
+        // === ОТРАВЛЕНИЕ (от мухоморов) ===
+        private bool _poisoned = false;
+        private float _poisonTimer = 0;
+        private float _poisonDamageTimer = 0;
         
         // Меню
         private bool _showMenu = true;
@@ -78,6 +85,10 @@ namespace PurpleLord
         // Кусты с клубникой
         private List<Bush> _bushes;
 
+        // === ОГОРОД С МОРКОВКАМИ ===
+        private List<CarrotPatch> _carrotPatches; // Грядки с морковкой
+        private List<Carrot> _carrots; // Собранные морковки
+
         // Пиратские сундуки
         private List<TreasureChest> _treasureChests;
 
@@ -98,8 +109,9 @@ namespace PurpleLord
             _graphics = new GraphicsDeviceManager(this);
             Content.RootDirectory = "Content";
             IsMouseVisible = true;
-            _graphics.PreferredBackBufferWidth = 1280;
-            _graphics.PreferredBackBufferHeight = 720;
+            _graphics.PreferredBackBufferWidth = 1920;
+            _graphics.PreferredBackBufferHeight = 1080;
+            _graphics.IsFullScreen = true; // === ПОЛНЫЙ ЭКРАН ===
             Window.Title = "Purple Lord Platformer";
         }
 
@@ -111,6 +123,7 @@ namespace PurpleLord
             _palms = new List<Palm>();
             _items = new List<Item>();
             _enemies = new List<Enemy>();
+            _mushrooms = new List<MushroomEnemy>(); // === ИНИЦИАЛИЗАЦИЯ МУХОМОРОВ ===
             _treasureChests = new List<TreasureChest>();
             _keys = new List<Key>();
             _backgroundHills = new List<BackgroundHill>();
@@ -153,6 +166,40 @@ namespace PurpleLord
             
             // Кусты с клубникой
             _bushes = new List<Bush>();
+
+            // === ОГОРОД С МОРКОВКАМИ (инициализация) ===
+            _carrotPatches = new List<CarrotPatch>();
+            _carrots = new List<Carrot>();
+            
+            // Грядка 1 - возле старта (X=800)
+            _carrotPatches.Add(new CarrotPatch { X = 800, Y = GROUND_Y - 15, Width = 120 });
+            _carrotPatches.Add(new CarrotPatch { X = 820, Y = GROUND_Y - 15, Width = 100 });
+            _carrotPatches.Add(new CarrotPatch { X = 840, Y = GROUND_Y - 15, Width = 80 });
+            // Морковки на грядке (10 штук)
+            for (int i = 0; i < 10; i++)
+            {
+                _carrots.Add(new Carrot { X = 805 + i * 11, Y = GROUND_Y - 25 - (i % 3) * 8, Collected = false });
+            }
+            
+            // Грядка 2 - в центре уровня (X=2500)
+            _carrotPatches.Add(new CarrotPatch { X = 2500, Y = GROUND_Y - 15, Width = 150 });
+            _carrotPatches.Add(new CarrotPatch { X = 2520, Y = GROUND_Y - 15, Width = 130 });
+            _carrotPatches.Add(new CarrotPatch { X = 2540, Y = GROUND_Y - 15, Width = 110 });
+            // Морковки на грядке (12 штук)
+            for (int i = 0; i < 12; i++)
+            {
+                _carrots.Add(new Carrot { X = 2505 + i * 11, Y = GROUND_Y - 25 - (i % 3) * 8, Collected = false });
+            }
+            
+            // Грядка 3 - возле вулканов (X=2600)
+            _carrotPatches.Add(new CarrotPatch { X = 2600, Y = GROUND_Y - 15, Width = 140 });
+            _carrotPatches.Add(new CarrotPatch { X = 2620, Y = GROUND_Y - 15, Width = 120 });
+            // Морковки на грядке (10 штук)
+            for (int i = 0; i < 10; i++)
+            {
+                _carrots.Add(new Carrot { X = 2605 + i * 12, Y = GROUND_Y - 25 - (i % 2) * 6, Collected = false });
+            }
+            
             for (int i = 0; i < 15; i++)
             {
                 int bx = 150 + i * 350;
@@ -168,6 +215,17 @@ namespace PurpleLord
             {
                 _enemies.Add(new Enemy { X = 400 + i * 600, Y = GROUND_Y - 20, Type = 0 });
             }
+
+            // === ЯДОВИТЫЕ ГРИБЫ МУХОМОРЫ ===
+            // Добавляем мухоморы в разных местах карты
+            _mushrooms.Add(new MushroomEnemy(new Vector2(600, GROUND_Y - 25)));
+            _mushrooms.Add(new MushroomEnemy(new Vector2(1400, GROUND_Y - 25)));
+            _mushrooms.Add(new MushroomEnemy(new Vector2(2200, GROUND_Y - 25)));
+            _mushrooms.Add(new MushroomEnemy(new Vector2(3000, GROUND_Y - 25)));
+            _mushrooms.Add(new MushroomEnemy(new Vector2(3800, GROUND_Y - 25)));
+            // Мухоморы на возвышенностях
+            _mushrooms.Add(new MushroomEnemy(new Vector2(1000, GROUND_Y - 25)));
+            _mushrooms.Add(new MushroomEnemy(new Vector2(1800, GROUND_Y - 25)));
             
             // Реки с крокодилами (каждые 2000 пикселей)
             for (int i = 1; i < 5; i++)
@@ -351,7 +409,48 @@ namespace PurpleLord
             
             // Выход
             if (kb.IsKeyDown(Keys.Escape)) Exit();
-            
+
+            // === ОБНОВЛЕНИЕ ОТРАВЛЕНИЯ ===
+            if (_poisoned)
+            {
+                _poisonTimer -= dt;
+                _poisonDamageTimer += dt;
+                
+                // Каждые 0.5 секунды наносим урон
+                if (_poisonDamageTimer >= 0.5f)
+                {
+                    _xp = Math.Max(0, _xp - 10); // -10 XP за тик отравления
+                    _poisonDamageTimer = 0;
+                    
+                    // Зелёные частицы при уроне от отравления
+                    for (int i = 0; i < 5; i++)
+                    {
+                        _dirtParticles.Add(new DirtParticle
+                        {
+                            X = _playerPos.X,
+                            Y = _playerPos.Y - 30,
+                            VX = (float)(_random.NextDouble() - 0.5) * 200f,
+                            VY = (float)(_random.NextDouble() - 0.5) * 200f - 100f,
+                            Size = 3 + (float)_random.NextDouble() * 3f,
+                            Life = 0.5f,
+                            Rotation = 0,
+                            Color = new Color(100, 255, 100)
+                        });
+                    }
+                    
+                    // Звук урона от отравления
+                    PlaySound(400, 0.08f);
+                }
+                
+                // Окончание отравления
+                if (_poisonTimer <= 0)
+                {
+                    _poisoned = false;
+                    _poisonTimer = 0;
+                    _poisonDamageTimer = 0;
+                }
+            }
+
             // Движение
             float move = 0;
             if (kb.IsKeyDown(Keys.A) || kb.IsKeyDown(Keys.Left))
@@ -653,6 +752,20 @@ namespace PurpleLord
                     PlaySound(1000, 0.15f); // Звук подбора ключа
                 }
             }
+            
+            // === СБОР МОРКОВОК С ГРЯДОК ===
+            foreach (var carrot in _carrots)
+            {
+                if (!carrot.Collected && Vector2.Distance(_playerPos, new Vector2(carrot.X, carrot.Y)) < 40)
+                {
+                    carrot.Collected = true;
+                    _xp += 5; // Морковка +5 XP
+                    _rocks++; // Считаем как "урожай"
+                    PlaySound(1400, 0.08f); // Высокий звук сбора
+                    
+                    if (_xp >= 100) { _xp -= 100; _level++; }
+                }
+            }
 
             // Открытие пиратских сундуков
             foreach (var chest in _treasureChests)
@@ -703,6 +816,58 @@ namespace PurpleLord
                             VY = (float)(_random.NextDouble() - 0.5) * 400f - 200f,
                             Size = 3 + (float)_random.NextDouble() * 5f,
                             Life = 1.5f
+                        });
+                    }
+                }
+            }
+            
+            // === СТОЛКНОВЕНИЯ С МУХОМОРАМИ (ОТРАВЛЕНИЕ) ===
+            foreach (var m in _mushrooms)
+            {
+                if (Vector2.Distance(_playerPos, m.Position) < 55)
+                {
+                    _xp = Math.Max(0, _xp - 20);
+                    _playerPos.X += _playerPos.X < m.Position.X ? -50 : 50;
+                    _playerPos.Y -= 30;
+
+                    // Негативный звук урона
+                    PlaySound(150, 0.3f);
+
+                    // КРОВЬ!
+                    for (int i = 0; i < 20; i++)
+                    {
+                        _bloodDrops.Add(new BloodDrop
+                        {
+                            X = _playerPos.X,
+                            Y = _playerPos.Y,
+                            VX = (float)(_random.NextDouble() - 0.5) * 400f,
+                            VY = (float)(_random.NextDouble() - 0.5) * 400f - 200f,
+                            Size = 3 + (float)_random.NextDouble() * 5f,
+                            Life = 1.5f
+                        });
+                    }
+                    
+                    // === ОТРАВЛЕНИЕ! ===
+                    _poisoned = true;
+                    _poisonTimer = 5f; // 5 секунд отравления
+                    _poisonDamageTimer = 0;
+                    
+                    // Звук отравления (высокий тон)
+                    PlaySound(800, 0.15f);
+                    
+                    // Зелёные частицы отравления
+                    for (int i = 0; i < 15; i++)
+                    {
+                        _dirtParticles.Add(new DirtParticle
+                        {
+                            X = _playerPos.X,
+                            Y = _playerPos.Y - 30,
+                            VX = (float)(_random.NextDouble() - 0.5) * 300f,
+                            VY = (float)(_random.NextDouble() - 0.5) * 300f - 150f,
+                            Size = 4 + (float)_random.NextDouble() * 4f,
+                            Life = 0.8f,
+                            Rotation = 0,
+                            Color = new Color(100, 255, 100) // Зелёные частицы
                         });
                     }
                 }
@@ -1329,6 +1494,51 @@ namespace PurpleLord
                         DrawRect((int)item.X - 12, (int)item.Y, 24, 8, Color.Yellow);
                 }
             }
+            
+            // === ОТРИСОВКА ГРЯДОК С МОРКОВКАМИ ===
+            // Грядки (коричневые прямоугольники)
+            foreach (var patch in _carrotPatches)
+            {
+                int px = (int)patch.X;
+                int py = (int)patch.Y;
+                int pw = (int)patch.Width;
+                
+                // Земля грядки (тёмно-коричневая)
+                DrawRect(px - pw/2, py, pw, 15, new Color(101, 67, 33));
+                
+                // Бордюры грядки (светлее)
+                DrawRect(px - pw/2, py, pw, 3, new Color(139, 90, 43));
+                DrawRect(px - pw/2, py + 12, pw, 3, new Color(139, 90, 43));
+                
+                // Ряды на грядке (линии)
+                for (int r = 0; r < 3; r++)
+                {
+                    DrawRect(px - pw/2 + 5, py + 4 + r * 3, pw - 10, 1, new Color(80, 50, 25));
+                }
+            }
+            
+            // Морковки (оранжевые треугольники с зелёным хвостиком)
+            foreach (var carrot in _carrots)
+            {
+                if (!carrot.Collected)
+                {
+                    int cx = (int)carrot.X;
+                    int cy = (int)carrot.Y;
+                    
+                    // Оранжевый корнеплод (треугольник)
+                    DrawRect(cx - 4, cy - 8, 8, 12, Color.Orange);
+                    DrawRect(cx - 3, cy - 6, 6, 8, new Color(255, 200, 0)); // Блеск
+                    
+                    // Зелёный хвостик (3 листика)
+                    DrawRect(cx - 2, cy - 12, 2, 5, new Color(0, 150, 0));
+                    DrawRect(cx, cy - 13, 2, 4, new Color(0, 150, 0));
+                    DrawRect(cx + 2, cy - 12, 2, 5, new Color(0, 150, 0));
+                    
+                    // Анимация покачивания
+                    float bounce = (float)Math.Sin(gameTime.TotalGameTime.TotalMilliseconds * 0.003 + cx) * 2;
+                    DrawRect(cx - 1, (int)(cy - 14 + bounce), 2, 2, new Color(0, 200, 0));
+                }
+            }
 
             // Пиратские сундуки (увеличенные в 1.5 раза)
             foreach (var chest in _treasureChests)
@@ -1547,6 +1757,44 @@ namespace PurpleLord
                 }
             }
             
+            // === ОТРИСОВКА МУХОМОРОВ (отдельный список) ===
+            foreach (var m in _mushrooms)
+            {
+                int mx = (int)m.Position.X;
+                int my = (int)m.Position.Y;
+                    
+                // Ножка гриба (светло-бежевая)
+                DrawRect(mx - 7, my, 14, 25, new Color(240, 230, 210));
+                    
+                // Юбочка на ножке (розовая)
+                DrawRect(mx - 10, my + 8, 20, 4, new Color(255, 200, 200));
+                    
+                // Шляпка (красная с белыми точками)
+                int capY = my - 10;
+                // Рисуем полукруглую шляпку
+                for (int dy = 0; dy < 20; dy++)
+                {
+                    int width = (int)Math.Sqrt(400 - dy * dy); // Полукруг радиусом 20
+                    DrawRect(mx - width / 2, capY + dy, width, 2, new Color(220, 50, 50));
+                }
+                    
+                // Белые точки на шляпке (5-7 штук)
+                DrawCircle(mx - 8, capY + 8, 3, Color.White);
+                DrawCircle(mx + 8, capY + 8, 3, Color.White);
+                DrawCircle(mx, capY + 5, 3, Color.White);
+                DrawCircle(mx - 6, capY + 14, 2, Color.White);
+                DrawCircle(mx + 6, capY + 14, 2, Color.White);
+                    
+                // === ЯДОВИТЫЙ ГАЗ (зелёные частицы вокруг) ===
+                float gasOffset = (float)Math.Sin(gameTime.TotalGameTime.TotalSeconds * 3) * 5;
+                for (int g = 0; g < 5; g++)
+                {
+                    float gx = mx + (g - 2) * 8 + gasOffset;
+                    float gy = capY - 10 - g * 6;
+                    DrawCircle((int)gx, (int)gy, 3 + g / 2, new Color(100, 255, 100, 150));
+                }
+            }
+            
             // Игрок
             DrawPlayer();
             
@@ -1556,9 +1804,25 @@ namespace PurpleLord
             _spriteBatch.Begin();
             DrawText($"XP: {_xp} | Уровень: {_level}", 15, 15, Color.Goldenrod, 1.5f);
             DrawText($"Ключи: {_keysCount}", 15, 45, Color.Gold, 1.5f);
-            DrawText($"Алмазы: {_diamonds} | Камни: {_rocks}", 15, 75, Color.Cyan, 1.2f);
+            DrawText($"Алмазы: {_diamonds}", 15, 75, Color.Cyan, 1.2f);
+            
+            // Подсчёт собранных морковок
+            int collectedCarrots = 0;
+            foreach (var c in _carrots) { if (c.Collected) collectedCarrots++; }
+            DrawText($"Морковки: {collectedCarrots}/{_carrots.Count}", 15, 100, Color.Orange, 1.2f);
+            
             if (_hasShovel)
-                DrawText("Лопата: есть! (K - копать)", 15, 100, Color.Orange, 1.2f);
+                DrawText("Лопата: есть! (K - копать)", 15, 130, Color.Orange, 1.2f);
+            
+            // === ИНДИКАТОР ОТРАВЛЕНИЯ ===
+            if (_poisoned)
+            {
+                DrawText($"☠️ ОТРАВЛЕНИЕ! {_poisonTimer:F1}с", 15, 160, Color.Lime, 1.5f);
+                // Зелёная пульсирующая рамка вокруг текста
+                float pulse = (float)Math.Sin(gameTime.TotalGameTime.TotalMilliseconds * 0.01) * 0.3f + 0.7f;
+                DrawRect(10, 125, 200, 30, new Color(0, 255, 0, (int)(100 * pulse)));
+            }
+            
             DrawText("A/D - Бег | Пробел - Прыжок | K - Копать грунт | Escape - Выход", 15, 680, Color.White, 1f);
             
             // Полоска XP
@@ -2074,6 +2338,10 @@ namespace PurpleLord
     public class Diamond { public int X, Y, Size; public bool Collected; }
     public class DugHole { public float X, Y, Life, Size; } // Выкопанная яма
     public class Shovel { public float X, Y, Rotation; } // Лопата для отрисовки
-    public class DirtParticle { public float X, Y, VX, VY, Size, Life, Rotation; } // Частица земли
+    public class DirtParticle { public float X, Y, VX, VY, Size, Life, Rotation; public Color Color; } // Частица земли
     public class DirtBlock { public float X, Y, Size; public bool Collected; } // Блок грунта
+    
+    // === КЛАССЫ ДЛЯ ОГОРОДА ===
+    public class CarrotPatch { public float X, Y, Width; } // Грядка с морковкой
+    public class Carrot { public float X, Y; public bool Collected; } // Морковка
 }
