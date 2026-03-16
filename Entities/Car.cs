@@ -37,11 +37,14 @@ namespace PurpleLord.Entities
             // Вращение колёс при движении
             WheelRotation += (Speed * dt) / WheelRadius;
             
-            // Генерация выхлопного дыма
-            if (Math.Abs(Speed) > 10)
+            // Разворот машины при достижении краёв
+            if (X < 200)
             {
-                // Добавляем частицы выхлопа
-                return; // Логика дыма будет в Game1
+                Direction = 1;
+            }
+            else if (X > 9800)
+            {
+                Direction = -1;
             }
         }
         
@@ -58,7 +61,7 @@ namespace PurpleLord.Entities
             Color windowColor = new Color(100, 150, 200); // Голубые окна
             Color wheelColor = Color.DarkGray;
             
-            // Основной корпус (прямоугольник со скруглёнными краями)
+            // Основной корпус (прямоугольник)
             Rectangle bodyRect = new Rectangle(
                 (int)(X - Width / 2),
                 (int)(Y - Height / 2),
@@ -144,46 +147,20 @@ namespace PurpleLord.Entities
         /// </summary>
         private void DrawWheel(SpriteBatch spriteBatch, float x, float y, float radius, float rotation, Color color)
         {
-            // Рисуем колесо как круг из пикселей
+            // Рисуем колесо как круг (используем приближение квадратом для простоты)
             int diameter = (int)(radius * 2);
+            Rectangle wheelRect = new Rectangle(
+                (int)(x - radius),
+                (int)(y - radius),
+                diameter,
+                diameter
+            );
             
-            // Основной круг колеса
-            for (int dy = -diameter / 2; dy <= diameter / 2; dy++)
-            {
-                for (int dx = -diameter / 2; dx <= diameter / 2; dx++)
-                {
-                    float dist = (float)Math.Sqrt(dx * dx + dy * dy);
-                    if (dist <= radius)
-                    {
-                        spriteBatch.Draw(_pixel, new Vector2(x + dx, y + dy), color);
-                    }
-                }
-            }
+            // Рисуем колесо
+            spriteBatch.Draw(_pixel, wheelRect, color);
             
-            // Спицы колеса (для эффекта вращения)
-            float spokeLength = radius * 0.7f;
-            for (int i = 0; i < 5; i++)
-            {
-                float angle = rotation + i * MathHelper.TwoPi / 5;
-                Vector2 spokeEnd = new Vector2(
-                    x + (float)Math.Cos(angle) * spokeLength,
-                    y + (float)Math.Sin(angle) * spokeLength
-                );
-                
-                // Рисуем линию спицы
-                Vector2 lineDir = spokeEnd - new Vector2(x, y);
-                float lineLength = lineDir.Length();
-                lineDir.Normalize();
-                
-                for (float t = 0; t < lineLength; t += 1)
-                {
-                    Vector2 point = new Vector2(x, y) + lineDir * t;
-                    spriteBatch.Draw(_pixel, new Rectangle((int)point.X - 1, (int)point.Y - 1, 2, 2), Color.LightGray);
-                }
-            }
-            
-            // Центр колеса
-            int centerSize = 4;
+            // Центр колеса (для красоты)
+            int centerSize = 6;
             Rectangle centerRect = new Rectangle(
                 (int)(x - centerSize / 2),
                 (int)(y - centerSize / 2),
@@ -191,6 +168,24 @@ namespace PurpleLord.Entities
                 centerSize
             );
             spriteBatch.Draw(_pixel, centerRect, Color.Silver);
+            
+            // Спицы колеса (для эффекта вращения) - рисуем 4 линии
+            float spokeLength = radius * 0.6f;
+            for (int i = 0; i < 4; i++)
+            {
+                float angle = rotation + i * MathHelper.PiOver2;
+                float spokeX = x + (float)Math.Cos(angle) * spokeLength;
+                float spokeY = y + (float)Math.Sin(angle) * spokeLength;
+                
+                // Рисуем маленькую линию спицы
+                Rectangle spokeRect = new Rectangle(
+                    (int)spokeX - 1,
+                    (int)spokeY - 1,
+                    3,
+                    3
+                );
+                spriteBatch.Draw(_pixel, spokeRect, Color.LightGray);
+            }
         }
         
         // Вспомогательная текстура для рисования
@@ -245,19 +240,15 @@ namespace PurpleLord.Entities
         {
             if (Life <= 0) return;
             
-            // Рисуем круглую частицу дыма
-            int radius = (int)(Size / 2);
-            for (int dy = -radius; dy <= radius; dy++)
-            {
-                for (int dx = -radius; dx <= radius; dx++)
-                {
-                    float dist = (float)Math.Sqrt(dx * dx + dy * dy);
-                    if (dist <= radius)
-                    {
-                        spriteBatch.Draw(_pixel, new Vector2(X + dx, Y + dy), Color);
-                    }
-                }
-            }
+            // Рисуем частицу дыма как квадрат
+            int size = (int)Size;
+            Rectangle rect = new Rectangle(
+                (int)(X - size / 2),
+                (int)(Y - size / 2),
+                size,
+                size
+            );
+            spriteBatch.Draw(_pixel, rect, Color);
         }
         
         // Вспомогательная текстура

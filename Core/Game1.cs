@@ -66,7 +66,13 @@ namespace PurpleLord
         // Меню
         private bool _showMenu = true;
         private float _menuBlink = 0;
-        
+
+        // === ДЕНЬ/НОЧЬ ===
+        private bool _isDay = true;
+        private Rectangle _dayNightButton;
+        private float _dayNightTimer = 0;
+        private ButtonState _prevMouseLeft = ButtonState.Released;
+
         // Горы и вулканы
         private List<Mountain> _mountains;
         private List<Volcano> _volcanoes;
@@ -116,7 +122,7 @@ namespace PurpleLord
             IsMouseVisible = true;
             _graphics.PreferredBackBufferWidth = 1920;
             _graphics.PreferredBackBufferHeight = 1080;
-            _graphics.IsFullScreen = true; // === ПОЛНЫЙ ЭКРАН ===
+            _graphics.IsFullScreen = false; // Отключено для отладки
             Window.Title = "Purple Lord Platformer";
         }
 
@@ -394,7 +400,10 @@ namespace PurpleLord
                     }
                 }
             }
-            
+
+            // === КНОПКА ДЕНЬ/НОЧЬ ===
+            _dayNightButton = new Rectangle(10, 10, 140, 50);
+
             base.Initialize();
         }
 
@@ -428,6 +437,19 @@ namespace PurpleLord
             
             // Выход
             if (kb.IsKeyDown(Keys.Escape)) Exit();
+
+            // === ОБРАБОТКА КНОПКИ ДЕНЬ/НОЧЬ ===
+            MouseState mouse = Mouse.GetState();
+            if (mouse.LeftButton == ButtonState.Pressed && _prevMouseLeft == ButtonState.Released)
+            {
+                if (_dayNightButton.Contains(mouse.X, mouse.Y))
+                {
+                    _isDay = !_isDay;
+                    _dayNightTimer = 0.3f; // Эффект нажатия
+                    PlaySound(_isDay ? 800 : 400, 0.15f);
+                }
+            }
+            _prevMouseLeft = mouse.LeftButton;
 
             // === ОБНОВЛЕНИЕ ОТРАВЛЕНИЯ ===
             if (_poisoned)
@@ -1005,12 +1027,13 @@ namespace PurpleLord
 
         protected override void Draw(GameTime gameTime)
         {
-            GraphicsDevice.Clear(new Color(135, 206, 235));
+            float dt = (float)gameTime.ElapsedGameTime.TotalSeconds;
+            
+            // Цвет фона в зависимости от времени суток
+            Color bgColor = _isDay ? new Color(135, 206, 235) : new Color(10, 10, 40);
+            GraphicsDevice.Clear(bgColor);
 
             _spriteBatch.Begin(transformMatrix: Matrix.CreateTranslation(-_cameraX, -_cameraY, 0));
-
-            // Солнце с лучами (теперь привязано к камере - всегда видно слева)
-            DrawSun((int)_cameraX + 100, 80 + (int)_cameraY);
 
             // === ФОНОВЫЕ ХОЛМЫ (не двигаются с камерой - параллакс) ===
             // Рисуем холмы без смещения камеры - они стоят на месте
@@ -1043,26 +1066,92 @@ namespace PurpleLord
 
             _spriteBatch.End();
 
+            // === НЕБО (день/ночь) - рисуем без трансформации камеры ===
+            _spriteBatch.Begin();
+            
+            // Цвет неба в зависимости от времени суток
+            Color skyColor = _isDay 
+                ? new Color(135, 206, 235) // Голубое дневное небо
+                : new Color(10, 10, 40);   // Тёмное ночное небо
+            DrawRect(0, 0, 1920, 1080, skyColor);
+            
+            if (_isDay)
+            {
+                // === СОЛНЦЕ (стоит на месте) ===
+                int sunX = 1700;
+                int sunY = 100;
+                int sunRadius = 60;
+                
+                // Солнечный диск
+                DrawCircle(sunX, sunY, sunRadius, new Color(255, 255, 100, 255));
+                DrawCircle(sunX, sunY, sunRadius - 10, new Color(255, 255, 150, 255));
+                DrawCircle(sunX, sunY, sunRadius - 20, new Color(255, 255, 200, 255));
+                
+                // Солнечные лучи
+                for (int i = 0; i < 12; i++)
+                {
+                    float angle = i * MathHelper.PiOver2 / 3;
+                    float rayX = sunX + (float)Math.Cos(angle) * (sunRadius + 15);
+                    float rayY = sunY + (float)Math.Sin(angle) * (sunRadius + 15);
+                    DrawCircle((int)rayX, (int)rayY, 8, new Color(255, 255, 100, 200));
+                }
+            }
+            else
+            {
+                // === ЛУНА (стоит на месте) ===
+                int moonX = 1700;
+                int moonY = 100;
+                int moonRadius = 50;
+                
+                // Лунный диск
+                DrawCircle(moonX, moonY, moonRadius, new Color(200, 200, 220, 255));
+                DrawCircle(moonX + 10, moonY - 5, moonRadius - 15, new Color(180, 180, 200, 255));
+                
+                // Кратеры на луне
+                DrawCircle(moonX - 15, moonY - 10, 8, new Color(150, 150, 170, 255));
+                DrawCircle(moonX + 20, moonY + 15, 6, new Color(150, 150, 170, 255));
+                DrawCircle(moonX - 5, moonY + 20, 10, new Color(150, 150, 170, 255));
+                
+                // === ЗВЁЗДЫ ===
+                // Рисуем звёзды на всём небе
+                for (int i = 0; i < 100; i++)
+                {
+                    int starX = (i * 73) % 1920;
+                    int starY = (i * 91) % 400;
+                    int starSize = 2 + (i % 3);
+                    byte starAlpha = (byte)(150 + (i % 100));
+                    DrawCircle(starX, starY, starSize, new Color((byte)255, (byte)255, (byte)255, starAlpha));
+                }
+            }
+            
+            _spriteBatch.End();
+
             // === ОБЛАКА (рисуем без трансформации камеры - стоят на месте) ===
             _spriteBatch.Begin();
+            
+            // Цвет облаков зависит от времени суток
+            Color cloudColor1 = _isDay ? new Color(255, 255, 255, 240) : new Color(80, 80, 100, 200);
+            Color cloudColor2 = _isDay ? new Color(255, 255, 255, 230) : new Color(60, 60, 80, 180);
+            Color cloudColor3 = _isDay ? new Color(255, 255, 255, 235) : new Color(70, 70, 90, 190);
+            
             foreach (var cloud in _clouds)
             {
-                // Пушистые белые облака из нескольких кругов
+                // Пушистые облака из нескольких кругов
                 int cx = (int)cloud.X;
                 int cy = (int)cloud.Y;
                 float s = cloud.Scale;
 
                 // Основная часть облака
-                DrawCircle(cx, cy, (int)(25 * s), new Color(255, 255, 255, 240));
-                DrawCircle(cx + (int)(15 * s), cy, (int)(20 * s), new Color(255, 255, 255, 240));
-                DrawCircle(cx - (int)(15 * s), cy, (int)(20 * s), new Color(255, 255, 255, 240));
-                DrawCircle(cx + (int)(10 * s), cy - (int)(10 * s), (int)(18 * s), new Color(255, 255, 255, 240));
-                DrawCircle(cx - (int)(10 * s), cy - (int)(8 * s), (int)(16 * s), new Color(255, 255, 255, 240));
+                DrawCircle(cx, cy, (int)(25 * s), cloudColor1);
+                DrawCircle(cx + (int)(15 * s), cy, (int)(20 * s), cloudColor1);
+                DrawCircle(cx - (int)(15 * s), cy, (int)(20 * s), cloudColor1);
+                DrawCircle(cx + (int)(10 * s), cy - (int)(10 * s), (int)(18 * s), cloudColor1);
+                DrawCircle(cx - (int)(10 * s), cy - (int)(8 * s), (int)(16 * s), cloudColor1);
 
                 // для пушистости - ещё круги
-                DrawCircle(cx + (int)(20 * s), cy - (int)(5 * s), (int)(15 * s), new Color(255, 255, 255, 230));
-                DrawCircle(cx - (int)(20 * s), cy - (int)(5 * s), (int)(14 * s), new Color(255, 255, 255, 230));
-                DrawCircle(cx, cy - (int)(12 * s), (int)(17 * s), new Color(255, 255, 255, 235));
+                DrawCircle(cx + (int)(20 * s), cy - (int)(5 * s), (int)(15 * s), cloudColor2);
+                DrawCircle(cx - (int)(20 * s), cy - (int)(5 * s), (int)(14 * s), cloudColor2);
+                DrawCircle(cx, cy - (int)(12 * s), (int)(17 * s), cloudColor3);
             }
             _spriteBatch.End();
 
@@ -1912,9 +2001,29 @@ namespace PurpleLord
                 DrawText("Ищите лопату в сундуках!", 640 - 140, 575, Color.Orange, 1.2f);
                 DrawText("Копайте землю и находите алмазы!", 640 - 160, 610, Color.Cyan, 1.2f);
             }
+
+            // === КНОПКА ДЕНЬ/НОЧЬ ===
+            // Фон кнопки
+            Color buttonColor = _dayNightTimer > 0 
+                ? new Color(100, 255, 100) 
+                : (_isDay ? new Color(255, 255, 100) : new Color(100, 100, 255));
+            DrawRect(_dayNightButton.X, _dayNightButton.Y, _dayNightButton.Width, _dayNightButton.Height, buttonColor);
             
+            // Рамка кнопки
+            DrawRect(_dayNightButton.X, _dayNightButton.Y, _dayNightButton.Width, 4, Color.White);
+            DrawRect(_dayNightButton.X, _dayNightButton.Y + _dayNightButton.Height - 4, _dayNightButton.Width, 4, Color.White);
+            DrawRect(_dayNightButton.X, _dayNightButton.Y, 4, _dayNightButton.Height, Color.White);
+            DrawRect(_dayNightButton.X + _dayNightButton.Width - 4, _dayNightButton.Y, 4, _dayNightButton.Height, Color.White);
+            
+            // Текст на кнопке
+            string buttonText = _isDay ? "☀️ ДЕНЬ" : "🌙 НОЧЬ";
+            DrawText(buttonText, _dayNightButton.X + 15, _dayNightButton.Y + 12, Color.White, 1.5f);
+            
+            // Обновление таймера кнопки
+            if (_dayNightTimer > 0) _dayNightTimer -= dt;
+
             _spriteBatch.End();
-            
+
             base.Draw(gameTime);
         }
         
@@ -2170,71 +2279,7 @@ namespace PurpleLord
                 DrawRect((int)toeX - 2, (int)toeY - 2, 4, 4, new Color(101, 67, 33));
             }
         }
-        
-        private void DrawSun(int x, int y)
-        {
-            float time = (float)(DateTime.Now.Millisecond / 1000.0);
-            
-            // Длинные жёлтые лучи с изменяющейся длиной (излучение энергии)
-            for (int i = 0; i < 16; i++)
-            {
-                float baseAngle = i * (float)Math.PI / 8;
-                
-                // Пульсация длины луча (от 60 до 120 пикселей)
-                float pulse = (float)Math.Sin(time * 3 + i * 0.5) * 0.5f + 0.5f;
-                float rayLength = 60f + pulse * 60f;
-                
-                // Угол с небольшим вращением
-                float angle = (float)(time * 0.5 + baseAngle);
-                
-                // Позиция конца луча
-                float rx = x + (float)Math.Cos(angle) * rayLength;
-                float ry = y + (float)Math.Sin(angle) * rayLength;
-                
-                // Позиция начала луча (от центра)
-                float startX = x + (float)Math.Cos(angle) * 40;
-                float startY = y + (float)Math.Sin(angle) * 40;
-                
-                // Рисуем луч как линию из сегментов
-                int segments = (int)(rayLength / 10);
-                for (int s = 0; s < segments; s++)
-                {
-                    float segX = startX + (float)Math.Cos(angle) * (s * 10);
-                    float segY = startY + (float)Math.Sin(angle) * (s * 10);
-                    
-                    // Луч сужается к концу и становится прозрачнее
-                    float alpha = 1 - (float)s / segments;
-                    int size = Math.Max(2, 12 - s);
-                    
-                    Color rayColor = new Color(255, 255, 0, (int)(alpha * 200));
-                    DrawRect((int)segX - size/2, (int)segY - size/2, size, size, rayColor);
-                }
-                
-                // Яркая точка на конце луча (вспышка энергии)
-                if (pulse > 0.7f)
-                {
-                    DrawCircle((int)rx, (int)ry, 5, new Color(255, 255, 200, 180));
-                }
-            }
-            
-            // Центр солнца (яркое ядро)
-            DrawCircle(x, y, 40, new Color(255, 220, 0));
-            
-            // Внутреннее свечение ядра
-            DrawCircle(x, y, 25, new Color(255, 255, 100));
-            
-            // Самое яркое ядро
-            DrawCircle(x, y, 12, new Color(255, 255, 200));
-            
-            // Внешний ореол
-            for (int h = 0; h < 3; h++)
-            {
-                int haloRadius = 45 + h * 8;
-                float haloAlpha = 0.3f - h * 0.1f;
-                DrawCircle(x, y, haloRadius, new Color(255, 200, 0, (int)(haloAlpha * 255)));
-            }
-        }
-        
+
         private void DrawRect(int x, int y, int w, int h, Color c) =>
             _spriteBatch.Draw(_pixel, new Rectangle(x, y, w, h), c);
         
