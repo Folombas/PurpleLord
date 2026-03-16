@@ -1068,32 +1068,70 @@ namespace PurpleLord
 
             // === НЕБО (день/ночь) - рисуем без трансформации камеры ===
             _spriteBatch.Begin();
-            
-            // Цвет неба в зависимости от времени суток
-            Color skyColor = _isDay 
-                ? new Color(135, 206, 235) // Голубое дневное небо
-                : new Color(10, 10, 40);   // Тёмное ночное небо
-            DrawRect(0, 0, 1920, 1080, skyColor);
-            
+
+            // Градиент неба
+            for (int y = 0; y < 1080; y += 4)
+            {
+                float t = y / 1080f;
+                if (_isDay)
+                {
+                    // Дневное небо: от светло-голубого к более тёмному
+                    Color top = new Color(135, 206, 235);
+                    Color bottom = new Color(176, 224, 230);
+                    Color c = new Color(
+                        (byte)(top.R * (1 - t) + bottom.R * t),
+                        (byte)(top.G * (1 - t) + bottom.G * t),
+                        (byte)(top.B * (1 - t) + bottom.B * t)
+                    );
+                    DrawRect(0, y, 1920, 4, c);
+                }
+                else
+                {
+                    // Ночное небо: от тёмно-синего к чёрному
+                    Color top = new Color(5, 5, 20);
+                    Color bottom = new Color(20, 20, 50);
+                    Color c = new Color(
+                        (byte)(top.R * (1 - t) + bottom.R * t),
+                        (byte)(top.G * (1 - t) + bottom.G * t),
+                        (byte)(top.B * (1 - t) + bottom.B * t)
+                    );
+                    DrawRect(0, y, 1920, 4, c);
+                }
+            }
+
             if (_isDay)
             {
                 // === СОЛНЦЕ (стоит на месте) ===
                 int sunX = 1700;
                 int sunY = 100;
-                int sunRadius = 60;
-                
-                // Солнечный диск
-                DrawCircle(sunX, sunY, sunRadius, new Color(255, 255, 100, 255));
-                DrawCircle(sunX, sunY, sunRadius - 10, new Color(255, 255, 150, 255));
-                DrawCircle(sunX, sunY, sunRadius - 20, new Color(255, 255, 200, 255));
-                
-                // Солнечные лучи
-                for (int i = 0; i < 12; i++)
+                int sunRadius = 70;
+
+                // Солнечная корона (свечение)
+                for (int i = 0; i < 5; i++)
                 {
-                    float angle = i * MathHelper.PiOver2 / 3;
-                    float rayX = sunX + (float)Math.Cos(angle) * (sunRadius + 15);
-                    float rayY = sunY + (float)Math.Sin(angle) * (sunRadius + 15);
-                    DrawCircle((int)rayX, (int)rayY, 8, new Color(255, 255, 100, 200));
+                    int radius = sunRadius + i * 8;
+                    byte alpha = (byte)(200 - i * 35);
+                    DrawCircle(sunX, sunY, radius, new Color((byte)255, (byte)255, (byte)200, alpha));
+                }
+
+                // Солнечный диск
+                DrawCircle(sunX, sunY, sunRadius, new Color((byte)255, (byte)255, (byte)150, (byte)255));
+                DrawCircle(sunX, sunY, sunRadius - 15, new Color((byte)255, (byte)255, (byte)180, (byte)255));
+                DrawCircle(sunX, sunY, sunRadius - 30, new Color((byte)255, (byte)255, (byte)220, (byte)255));
+
+                // Солнечные лучи (16 лучей)
+                for (int i = 0; i < 16; i++)
+                {
+                    float angle = i * MathHelper.TwoPi / 16;
+                    for (int j = 0; j < 3; j++)
+                    {
+                        float dist = sunRadius + 20 + j * 12;
+                        float rayX = sunX + (float)Math.Cos(angle) * dist;
+                        float rayY = sunY + (float)Math.Sin(angle) * dist;
+                        int raySize = 10 - j * 2;
+                        byte rayAlpha = (byte)(255 - j * 60);
+                        DrawCircle((int)rayX, (int)rayY, raySize, new Color((byte)255, (byte)255, (byte)100, rayAlpha));
+                    }
                 }
             }
             else
@@ -1101,26 +1139,63 @@ namespace PurpleLord
                 // === ЛУНА (стоит на месте) ===
                 int moonX = 1700;
                 int moonY = 100;
-                int moonRadius = 50;
-                
-                // Лунный диск
-                DrawCircle(moonX, moonY, moonRadius, new Color(200, 200, 220, 255));
-                DrawCircle(moonX + 10, moonY - 5, moonRadius - 15, new Color(180, 180, 200, 255));
-                
-                // Кратеры на луне
-                DrawCircle(moonX - 15, moonY - 10, 8, new Color(150, 150, 170, 255));
-                DrawCircle(moonX + 20, moonY + 15, 6, new Color(150, 150, 170, 255));
-                DrawCircle(moonX - 5, moonY + 20, 10, new Color(150, 150, 170, 255));
-                
-                // === ЗВЁЗДЫ ===
-                // Рисуем звёзды на всём небе
-                for (int i = 0; i < 100; i++)
+                int moonRadius = 55;
+
+                // Лунное свечение
+                for (int i = 0; i < 4; i++)
                 {
-                    int starX = (i * 73) % 1920;
-                    int starY = (i * 91) % 400;
-                    int starSize = 2 + (i % 3);
-                    byte starAlpha = (byte)(150 + (i % 100));
-                    DrawCircle(starX, starY, starSize, new Color((byte)255, (byte)255, (byte)255, starAlpha));
+                    int radius = moonRadius + i * 6;
+                    byte alpha = (byte)(150 - i * 30);
+                    DrawCircle(moonX, moonY, radius, new Color((byte)200, (byte)200, (byte)220, alpha));
+                }
+
+                // Лунный диск
+                DrawCircle(moonX, moonY, moonRadius, new Color((byte)220, (byte)220, (byte)235, (byte)255));
+                DrawCircle(moonX + 8, moonY - 3, moonRadius - 12, new Color((byte)200, (byte)200, (byte)215, (byte)255));
+
+                // Кратеры на луне (разного размера)
+                DrawCircle(moonX - 20, moonY - 15, 10, new Color((byte)170, (byte)170, (byte)185, (byte)255));
+                DrawCircle(moonX + 25, moonY + 10, 8, new Color((byte)170, (byte)170, (byte)185, (byte)255));
+                DrawCircle(moonX - 8, moonY + 25, 12, new Color((byte)170, (byte)170, (byte)185, (byte)255));
+                DrawCircle(moonX + 15, moonY - 25, 6, new Color((byte)170, (byte)170, (byte)185, (byte)255));
+                DrawCircle(moonX - 30, moonY + 5, 7, new Color((byte)170, (byte)170, (byte)185, (byte)255));
+
+                // === МЛЕЧНЫЙ ПУТЬ ===
+                // Рисуем полосу Млечного Пути через всё небо
+                for (int i = 0; i < 300; i++)
+                {
+                    // Позиция звёзд Млечного Пути (диагональная полоса)
+                    float milkyWayX = (i * 6.4f) + (float)Math.Sin(i * 0.1) * 50;
+                    float milkyWayY = 50 + (i * 0.8f) + (float)Math.Cos(i * 0.05) * 30;
+
+                    if (milkyWayX > 0 && milkyWayX < 1920 && milkyWayY > 0 && milkyWayY < 400)
+                    {
+                        int mwStarSize = 1 + (i % 2);
+                        byte mwAlpha = (byte)(100 + (i % 80));
+                        DrawCircle((int)milkyWayX, (int)milkyWayY, mwStarSize,
+                            new Color((byte)200, (byte)210, (byte)255, mwAlpha));
+                    }
+                }
+
+                // === ЗВЁЗДЫ (рандомная генерация) ===
+                // Используем детерминированный рандом для стабильности
+                Random starRandom = new Random(42); // Фиксированный сид для постоянства
+                for (int i = 0; i < 200; i++)
+                {
+                    int starX = starRandom.Next(0, 1920);
+                    int starY = starRandom.Next(0, 400);
+                    int starSize = 1 + starRandom.Next(0, 4); // 1-4 пикселя
+                    byte starAlpha = (byte)(150 + starRandom.Next(0, 106)); // 150-255
+                    
+                    // Мерцание звёзд
+                    float twinkle = (float)Math.Sin(gameTime.TotalGameTime.TotalSeconds * 3 + i) * 0.3f + 0.7f;
+                    byte finalAlpha = (byte)(starAlpha * twinkle);
+
+                    Color starColor = starSize > 2 ?
+                        new Color((byte)255, (byte)255, (byte)200, finalAlpha) : // Жёлтоватые для больших
+                        new Color((byte)255, (byte)255, (byte)255, finalAlpha);  // Белые для маленьких
+
+                    DrawCircle(starX, starY, starSize, starColor);
                 }
             }
             
@@ -1511,8 +1586,38 @@ namespace PurpleLord
                 }
                 // Оголовок трубы (расширение сверху)
                 DrawRect(chimneyX - 6, chimneyY - 10, chimneyWidth + 12, 15, new Color(160, 85, 35));
+
+                // === СВЕТ В ОКНАХ (только ночью) ===
+                if (!_isDay)
+                {
+                    // Лёгкое свечение вокруг окон (жёлтый свет)
+                    int glowSize = winSize + 20;
+                    Color windowGlow = new Color(255, 220, 150, 180);
+                    Color windowLight = new Color(255, 240, 200, 220);
+                    
+                    // Свечение левого окна
+                    DrawRect(win1X - 8, win1Y - 8, glowSize, glowSize, new Color(255, 230, 150, 100));
+                    DrawRect(win1X - 4, win1Y - 4, winSize + 8, winSize + 8, windowGlow);
+                    // Свет внутри окна (разной интенсивности для реалистичности)
+                    DrawRect(win1X - 2, win1Y - 2, winSize + 4, winSize + 4, windowLight);
+                    // Переплёт остаётся тёмным (силуэт на фоне света)
+                    DrawRect(win1X + winSize/2 - 2, win1Y - 4, 4, winSize + 8, new Color(80, 60, 30, 200));
+                    DrawRect(win1X - 4, win1Y + winSize/2 - 2, winSize + 8, 4, new Color(80, 60, 30, 200));
+                    
+                    // Свечение правого окна
+                    DrawRect(win2X - 8, win2Y - 8, glowSize, glowSize, new Color(255, 230, 150, 100));
+                    DrawRect(win2X - 4, win2Y - 4, winSize + 8, winSize + 8, windowGlow);
+                    DrawRect(win2X - 2, win2Y - 2, winSize + 4, winSize + 4, windowLight);
+                    // Переплёт остаётся тёмным
+                    DrawRect(win2X + winSize/2 - 2, win2Y - 4, 4, winSize + 8, new Color(80, 60, 30, 200));
+                    DrawRect(win2X - 4, win2Y + winSize/2 - 2, winSize + 8, 4, new Color(80, 60, 30, 200));
+                    
+                    // Блик на стекле (для красоты)
+                    DrawRect(win1X + 8, win1Y + 8, 12, 12, new Color(255, 255, 230, 200));
+                    DrawRect(win2X + 8, win2Y + 8, 12, 12, new Color(255, 255, 230, 200));
+                }
             }
-            
+
             // Дым
             foreach (var s in _smokes)
             {
