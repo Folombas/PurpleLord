@@ -5,6 +5,7 @@ using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
 using Microsoft.Xna.Framework.Audio;
 using PurpleLord.Entities.Enemies; // Для MushroomEnemy
+using PurpleLord.Entities; // Для Car и ExhaustParticle
 
 namespace PurpleLord
 {
@@ -103,7 +104,11 @@ namespace PurpleLord
 
         // Облака
         private List<Cloud> _clouds;
-        
+
+        // === АВТОМОБИЛЬ ===
+        private List<Car> _cars;
+        private List<ExhaustParticle> _exhaustParticles;
+
         public Game1()
         {
             _graphics = new GraphicsDeviceManager(this);
@@ -133,7 +138,9 @@ namespace PurpleLord
             _dugHoles = new List<DugHole>();
             _dirtParticles = new List<DirtParticle>();
             _dirtBlocks = new List<DirtBlock>();
-            
+            _cars = new List<Car>();
+            _exhaustParticles = new List<ExhaustParticle>();
+
             // Генерируем землю (бесконечно вправо)
             for (int i = 0; i < 20; i++)
             {
@@ -334,6 +341,14 @@ namespace PurpleLord
                 });
             }
 
+            // === АВТОМОБИЛИ НА КАРТЕ ===
+            // Добавляем несколько машин в разных местах карты
+            _cars.Add(new Car { X = 500, Y = GROUND_Y - 20, Speed = 100, Direction = 1 });
+            _cars.Add(new Car { X = 1500, Y = GROUND_Y - 20, Speed = 120, Direction = -1 });
+            _cars.Add(new Car { X = 2500, Y = GROUND_Y - 20, Speed = 110, Direction = 1 });
+            _cars.Add(new Car { X = 3500, Y = GROUND_Y - 20, Speed = 130, Direction = -1 });
+            _cars.Add(new Car { X = 4500, Y = GROUND_Y - 20, Speed = 100, Direction = 1 });
+
             // Камни и булыжники в земле (разных размеров и форм)
             for (int i = 0; i < 50; i++)
             {
@@ -388,6 +403,10 @@ namespace PurpleLord
             _spriteBatch = new SpriteBatch(GraphicsDevice);
             _pixel = new Texture2D(GraphicsDevice, 1, 1);
             _pixel.SetData(new[] { Color.White });
+            
+            // Инициализация статических текстур для машин и частиц
+            Car.Initialize(GraphicsDevice);
+            ExhaustParticle.Initialize(GraphicsDevice);
         }
 
         protected override void Update(GameTime gameTime)
@@ -582,7 +601,40 @@ namespace PurpleLord
                 p.Life -= dt;
                 if (p.Life <= 0) _dirtParticles.RemoveAt(i);
             }
+
+            // === ОБНОВЛЕНИЕ АВТОМОБИЛЕЙ ===
+            foreach (var car in _cars)
+            {
+                car.Update(gameTime, dt);
+                
+                // Генерация выхлопного дыма из выхлопной трубы
+                if (Math.Abs(car.Speed) > 10)
+                {
+                    float exhaustX = car.Direction > 0 ? car.X - car.Width / 2 + 5 : car.X + car.Width / 2 - 5;
+                    float exhaustY = car.Y + 5;
+                    
+                    // Добавляем частицы выхлопа
+                    _exhaustParticles.Add(new ExhaustParticle
+                    {
+                        X = exhaustX,
+                        Y = exhaustY,
+                        VX = -car.Direction * 50 + (float)(_random.NextDouble() - 0.5) * 20,
+                        VY = -30 - (float)_random.NextDouble() * 20,
+                        Size = 8 + (float)_random.NextDouble() * 6,
+                        Life = 1.5f + (float)_random.NextDouble() * 0.5f,
+                        Color = new Color(80 + _random.Next(0, 40), 80 + _random.Next(0, 40), 80 + _random.Next(0, 40), 150)
+                    });
+                }
+            }
             
+            // Обновление выхлопных частиц
+            for (int i = _exhaustParticles.Count - 1; i >= 0; i--)
+            {
+                var p = _exhaustParticles[i];
+                p.Update(dt);
+                if (p.Life <= 0) _exhaustParticles.RemoveAt(i);
+            }
+
             // Прыжок (только по нажатию!)
             bool jump = kb.IsKeyDown(Keys.Space) || kb.IsKeyDown(Keys.W);
             if (jump && !_prevJump)
@@ -1376,10 +1428,23 @@ namespace PurpleLord
             foreach (var s in _smokes)
             {
                 int alpha = (int)(s.Life / 2f * 200);
-                DrawRect((int)s.X - (int)s.Size/2, (int)s.Y - (int)s.Size/2, (int)s.Size, (int)s.Size, 
+                DrawRect((int)s.X - (int)s.Size/2, (int)s.Y - (int)s.Size/2, (int)s.Size, (int)s.Size,
                     new Color(200, 200, 200, alpha));
             }
+
+            // === АВТОМОБИЛИ С КОЛЁСАМИ И ВЫХЛОПНЫМ ДЫМОМ ===
+            // Сначала выхлопные частицы (чтобы были позади машин)
+            foreach (var p in _exhaustParticles)
+            {
+                p.Draw(_spriteBatch);
+            }
             
+            // Затем машины
+            foreach (var car in _cars)
+            {
+                car.Draw(_spriteBatch, gameTime);
+            }
+
             // Кровь
             foreach (var b in _bloodDrops)
             {
